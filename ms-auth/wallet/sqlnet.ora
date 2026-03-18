@@ -1,0 +1,2 @@
+WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="C:/Users/kmzj1/Desktop/proyecto_final/ms-auth/wallet")))
+SSL_SERVER_DN_MATCH=yes
