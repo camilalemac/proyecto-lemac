@@ -21,6 +21,7 @@ app.use((req, _res, next) => {
   next();
 });
 
+const msAcademicoUrl = process.env.MS_ACADEMICO_URL || "http://localhost:3004";
 const msAuthUrl = process.env.MS_AUTH_URL || "http://localhost:3001";
 const msGeoUrl = process.env.MS_GEO_URL || "http://localhost:3002";
 const msIdentityUrl = process.env.MS_IDENTITY_URL || "http://localhost:3003";
@@ -73,3 +74,18 @@ app.use("/api/v1/identity", identityProxy);
 app.use(errorHandler(logger));
 
 export default app;
+
+const academicoProxy = createProxyMiddleware({
+  target: msAcademicoUrl,
+  changeOrigin: true,
+  pathRewrite: { "^/api/v1/academico": "/api/v1/academico" },
+}) as any;
+
+academicoProxy.on("error", (err: any, req: any, res: any) => {
+  logger.error("Proxy academico error", { err, url: req.url });
+  res
+    .status(502)
+    .json({ success: false, message: "Academic service unavailable" });
+});
+
+app.use("/api/v1/academico", academicoProxy);
