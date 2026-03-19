@@ -14,7 +14,7 @@ export interface ResultadoPromocion {
 }
 
 export const matriculaService = {
-  listarAlumnosPorCurso: async (cursoId: number, colegioId: number): Promise<Matricula[]> => {
+  listarAlumnosPorCurso: async (cursoId: number, colegioId: number): Promise<any[]> => {
     const curso = await cursoRepository.findById(cursoId, colegioId);
     if (!curso) {
       throw ApiError.notFound(`Curso con ID ${cursoId} no encontrado`);
@@ -22,7 +22,7 @@ export const matriculaService = {
     return matriculaRepository.findAllByCurso(cursoId, colegioId);
   },
 
-  listarMatriculasPorAlumno: async (alumnoId: number, colegioId: number): Promise<Matricula[]> => {
+  listarMatriculasPorAlumno: async (alumnoId: number, colegioId: number): Promise<any[]> => {
     return matriculaRepository.findAllByAlumno(alumnoId, colegioId);
   },
 
@@ -76,8 +76,8 @@ export const matriculaService = {
     return matriculaRepository.create({
       ...data,
       NUMERO_LISTA: totalActuales + 1,
-      ESTADO: EstadoMatricula.ACTIVA,
-      ESTADO_PROMOCION: EstadoPromocion.PENDIENTE,
+      ESTADO: EstadoMatricula.REGULAR,
+      ESTADO_PROMOCION: EstadoPromocion.EN_CURSO,
     });
   },
 
@@ -103,7 +103,7 @@ export const matriculaService = {
 
     // Obtener todas las matrículas activas del curso
     const matriculas = await matriculaRepository.findAllByCurso(cursoId, colegioId);
-    const matriculasActivas = matriculas.filter((m) => m.ESTADO === EstadoMatricula.ACTIVA);
+    const matriculasActivas = matriculas.filter((m) => m.ESTADO === EstadoMatricula.REGULAR);
 
     if (matriculasActivas.length === 0) {
       throw ApiError.badRequest("El curso no tiene alumnos matriculados activos");
@@ -186,8 +186,8 @@ export const matriculaService = {
                   ANIO: siguienteAnio,
                   NUMERO_LISTA: totalEnCursoSiguiente + 1,
                   FECHA_ALTA: new Date(),
-                  ESTADO: EstadoMatricula.ACTIVA,
-                  ESTADO_PROMOCION: EstadoPromocion.PENDIENTE,
+                  ESTADO: EstadoMatricula.REGULAR,
+                  ESTADO_PROMOCION: EstadoPromocion.EN_CURSO,
                 },
                 { transaction: t },
               );
@@ -222,9 +222,9 @@ export const matriculaService = {
     if (!matricula) {
       throw ApiError.notFound(`Matrícula con ID ${matriculaId} no encontrada`);
     }
-    if (matricula.ESTADO !== EstadoMatricula.ACTIVA) {
+    if (matricula.ESTADO !== EstadoMatricula.REGULAR) {
       throw ApiError.conflict("La matrícula no está activa");
     }
-    await matriculaRepository.updateEstado(matriculaId, colegioId, EstadoMatricula.RETIRADA);
+    await matriculaRepository.updateEstado(matriculaId, colegioId, EstadoMatricula.RETIRADO);
   },
 };

@@ -6,9 +6,7 @@ import { Sequelize } from "sequelize";
 import oracledb from "oracledb";
 
 const dialect = (process.env.DB_DIALECT || "oracle").toLowerCase();
-const dbName =
-  process.env.DB_NAME ||
-  (dialect === "mysql" ? "test" : "softwarepayescolar_tp");
+const dbName = process.env.DB_NAME || (dialect === "mysql" ? "test" : "softwarepayescolar_tp");
 const dbUser = process.env.DB_USER || (dialect === "mysql" ? "root" : "system");
 const dbPassword = process.env.DB_PASSWORD || "";
 const walletDir = process.env.WALLET_DIR_NAME || "wallet";
@@ -31,9 +29,7 @@ if (dialect === "oracle") {
   const tnsContent = fs.readFileSync(tnsFile, "utf8");
   const tnEntries = Array.from(
     new Set(
-      (tnsContent.match(/^\s*([A-Za-z0-9_]+)\s*=/gm) || []).map((m) =>
-        m.replace(/\s*=\s*$/, ""),
-      ),
+      (tnsContent.match(/^\s*([A-Za-z0-9_]+)\s*=/gm) || []).map((m) => m.replace(/\s*=\s*$/, "")),
     ),
   );
 
@@ -73,9 +69,16 @@ console.log(`  selectedConnectString: ${selectedConnectString}`);
 
 const sequelizeOptions: any = {
   dialect: dialect as any,
-  logging: (sql, timing) => {
+  logging: (sql: string, timing?: number) => {
     console.debug("[ms-auth][sequelize]", sql, timing ? `(${timing}ms)` : "");
   },
+  define: {
+    schema: "MS_AUTH", // <--- Importante: Debe coincidir con tu esquema de Oracle
+    freezeTableName: true, // Evita que Sequelize pluralice los nombres
+    timestamps: true,
+    paranoid: true,
+  },
+
   pool: {
     max: 10,
     min: 0,

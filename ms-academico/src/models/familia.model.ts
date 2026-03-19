@@ -1,107 +1,69 @@
-import { DataTypes, Model, Optional } from "sequelize";
+import {
+  DataTypes,
+  Model,
+  InferAttributes,
+  InferCreationAttributes,
+  CreationOptional,
+} from "sequelize";
 import sequelize from "../config/database.config";
 
-interface FamiliaAttributes {
-  RELACION_ID: number;
-  COLEGIO_ID: number;
-  ALUMNO_ID: number;
-  APODERADO_ID: number;
-  TIPO_RELACION: string;
-  ES_APODERADO_ACAD: boolean;
-  ES_TITULAR_FINAN: boolean;
-  AUTORIZADO_RETIRO: boolean;
-  FECHA_CREACION: Date;
-  FECHA_ACTUALIZACION: Date;
-  FECHA_BAJA: Date | null;
-}
-
-interface FamiliaCreationAttributes extends Optional<
-  FamiliaAttributes,
-  | "RELACION_ID"
-  | "ES_APODERADO_ACAD"
-  | "ES_TITULAR_FINAN"
-  | "AUTORIZADO_RETIRO"
-  | "FECHA_CREACION"
-  | "FECHA_ACTUALIZACION"
-  | "FECHA_BAJA"
-> {}
-
-class Familia
-  extends Model<FamiliaAttributes, FamiliaCreationAttributes>
-  implements FamiliaAttributes
-{
-  public RELACION_ID!: number;
-  public COLEGIO_ID!: number;
-  public ALUMNO_ID!: number;
-  public APODERADO_ID!: number;
-  public TIPO_RELACION!: string;
-  public ES_APODERADO_ACAD!: boolean;
-  public ES_TITULAR_FINAN!: boolean;
-  public AUTORIZADO_RETIRO!: boolean;
-  public FECHA_CREACION!: Date;
-  public FECHA_ACTUALIZACION!: Date;
-  public FECHA_BAJA!: Date | null;
+export class Familia extends Model<InferAttributes<Familia>, InferCreationAttributes<Familia>> {
+  declare RELACION_ID: CreationOptional<number>;
+  declare COLEGIO_ID: number;
+  declare ALUMNO_ID: number;
+  declare APODERADO_ID: number;
+  declare TIPO_RELACION: string;
+  declare ES_APODERADO_ACAD: CreationOptional<string>;
+  declare ES_TITULAR_FINAN: CreationOptional<string>;
+  declare AUTORIZADO_RETIRO: CreationOptional<string>;
+  declare FECHA_CREACION: CreationOptional<Date>;
+  declare FECHA_ACTUALIZACION: CreationOptional<Date>;
+  declare FECHA_BAJA: CreationOptional<Date | null>;
 }
 
 Familia.init(
   {
-    RELACION_ID: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-    },
-    COLEGIO_ID: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-    },
+    RELACION_ID: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    COLEGIO_ID: { type: DataTypes.INTEGER, allowNull: false },
     ALUMNO_ID: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      comment: "FK lógica hacia IDN_USUARIOS (alumno) en MS_IDENTITY",
+      comment: "FK lógica hacia IDN_USUARIOS en MS_IDENTITY",
     },
     APODERADO_ID: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      comment: "FK lógica hacia IDN_USUARIOS (apoderado) en MS_IDENTITY",
+      comment: "FK lógica hacia IDN_USUARIOS en MS_IDENTITY",
     },
     TIPO_RELACION: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.STRING(20),
       allowNull: false,
-      comment: "Ej: PADRE, MADRE, TUTOR",
+      validate: { isIn: [["PADRE", "MADRE", "ABUELO", "TIO", "HERMANO", "TUTOR"]] },
     },
     ES_APODERADO_ACAD: {
-      type: DataTypes.BOOLEAN,
+      type: DataTypes.CHAR(1),
       allowNull: false,
-      defaultValue: false,
-      comment: "Indica si es el apoderado académico principal del alumno",
+      defaultValue: "N",
+      validate: { isIn: [["S", "N"]] },
+      comment: "S = Sí, N = No",
     },
     ES_TITULAR_FINAN: {
-      type: DataTypes.BOOLEAN,
+      type: DataTypes.CHAR(1),
       allowNull: false,
-      defaultValue: false,
-      comment: "Indica si es el titular financiero responsable de los pagos",
+      defaultValue: "N",
+      validate: { isIn: [["S", "N"]] },
+      comment: "S = Sí, N = No",
     },
     AUTORIZADO_RETIRO: {
-      type: DataTypes.BOOLEAN,
+      type: DataTypes.CHAR(1),
       allowNull: false,
-      defaultValue: false,
-      comment: "Indica si está autorizado para retirar al alumno",
+      defaultValue: "N",
+      validate: { isIn: [["S", "N"]] },
+      comment: "S = Sí, N = No",
     },
-    FECHA_CREACION: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-    },
-    FECHA_ACTUALIZACION: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-    },
-    FECHA_BAJA: {
-      type: DataTypes.DATE,
-      allowNull: true,
-      defaultValue: null,
-    },
+    FECHA_CREACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+    FECHA_ACTUALIZACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+    FECHA_BAJA: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
   },
   {
     sequelize,

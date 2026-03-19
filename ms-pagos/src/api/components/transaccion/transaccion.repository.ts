@@ -1,38 +1,30 @@
 import { WhereOptions } from "sequelize";
-import Transaccion, { EstadoTransaccion } from "../../../models/transaccion.model";
+import Transaccion from "../../../models/transaccion.model";
 
 export const transaccionRepository = {
-  findById: async (transaccionId: number, colegioId: number): Promise<Transaccion | null> => {
-    return Transaccion.findOne({
-      where: { TRANSACCION_ID: transaccionId, COLEGIO_ID: colegioId } as WhereOptions,
-    });
-  },
-
-  findByToken: async (token: string): Promise<Transaccion | null> => {
-    return Transaccion.findOne({ where: { TOKEN_PASARELA: token } as WhereOptions });
-  },
-
-  create: async (data: {
+  /**
+   * Registra un pago como evidencia inmutable en la tabla Blockchain.
+   * Solo INSERT — nunca UPDATE ni DELETE.
+   */
+  registrar: async (data: {
     COLEGIO_ID: number;
-    COBRO_IDS: string;
+    COBRO_ID: number;
     MONTO_PAGO: number;
     METODO_PAGO: string;
   }): Promise<Transaccion> => {
     return Transaccion.create(data);
   },
 
-  update: async (
-    transaccionId: number,
-    data: Partial<{
-      ESTADO: EstadoTransaccion;
-      TOKEN_PASARELA: string | null;
-      URL_PAGO: string | null;
-      FECHA_PAGO: Date | null;
-    }>,
-  ): Promise<[number]> => {
-    const [affectedCount] = await Transaccion.update(data, {
-      where: { TRANSACCION_ID: transaccionId } as WhereOptions,
+  findByCobro: async (cobroId: number, colegioId: number): Promise<Transaccion | null> => {
+    return Transaccion.findOne({
+      where: { COBRO_ID: cobroId, COLEGIO_ID: colegioId } as WhereOptions,
     });
-    return [affectedCount];
+  },
+
+  findAllByColegio: async (colegioId: number): Promise<Transaccion[]> => {
+    return Transaccion.findAll({
+      where: { COLEGIO_ID: colegioId } as WhereOptions,
+      order: [["FECHA_PAGO", "DESC"]],
+    });
   },
 };

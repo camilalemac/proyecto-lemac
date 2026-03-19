@@ -1,9 +1,4 @@
-import {
-  Model,
-  DataTypes,
-  InferAttributes,
-  InferCreationAttributes,
-} from "sequelize";
+import { Model, DataTypes, InferAttributes, InferCreationAttributes } from "sequelize";
 import sequelize from "../config/database.config";
 
 export type IdentityRole =
@@ -19,11 +14,7 @@ export type IdentityRole =
   | "admin"
   | "supervisor";
 
-export class Identity extends Model<
-  InferAttributes<Identity>,
-  InferCreationAttributes<Identity>
-> {
-  declare id?: number;
+export class Identity extends Model<InferAttributes<Identity>, InferCreationAttributes<Identity>> {
   declare userId?: number;
   declare colegioId?: number;
   declare grupoId?: number | null;
@@ -103,38 +94,18 @@ Identity.init(
       defaultValue: "activo",
       field: "ESTADO",
     },
-    role: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      field: "ROLE",
-    },
     fechaCreacion: {
       type: DataTypes.DATE,
       allowNull: false,
       defaultValue: DataTypes.NOW,
       field: "FECHA_CREACION",
     },
-    fechaActualizacion: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-      field: "FECHA_ACTUALIZACION",
-    },
-    fechaBaja: {
-      type: DataTypes.DATE,
-      allowNull: true,
-      field: "FECHA_BAJA",
-    },
   },
   {
     sequelize,
     tableName: "IDN_USUARIOS",
     modelName: "Identity",
-    timestamps: true,
-    createdAt: "FECHA_CREACION",
-    updatedAt: "FECHA_ACTUALIZACION",
-    paranoid: true,
-    deletedAt: "FECHA_BAJA",
+    timestamps: false,
   },
 );
 

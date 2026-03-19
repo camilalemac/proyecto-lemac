@@ -2,8 +2,6 @@ import { Transaction } from "sequelize";
 import sequelize from "../../../config/database.config";
 import { transaccionRepository } from "./transaccion.repository";
 import { cuentaCobrarRepository } from "../cuentaCobrar/cuentaCobrar.repository";
-import { cuentaBancariaRepository } from "../cuentaBancaria/cuentaBancaria.repository";
-import { conceptoRepository } from "../concepto/concepto.repository";
 import { metodoPagoService } from "../metodoPago/metodoPago.service";
 import { WebpayAdapter } from "../../../pasarela/webpay.adapter";
 import { KhipuAdapter } from "../../../pasarela/khipu.adapter";
@@ -11,7 +9,6 @@ import { TransferenciaAdapter } from "../../../pasarela/transferencia.adapter";
 import { IPasarelaPago } from "../../../pasarela/pasarela.interface";
 import { ApiError } from "../../../utils/ApiError";
 import { logger } from "../../../utils/logger";
-import Transaccion from "../../../models/transaccion.model";
 import CuentaCobrarModel from "../../../models/cuentaCobrar.model";
 
 const METODO_WEBPAY = "WEBPAY";
@@ -31,17 +28,18 @@ const obtenerAdaptadorPasarela = (metodoPago: string): IPasarelaPago => {
   }
 };
 
+/**
+ * Marca los cobros como PAGADO y registra cada uno en PAG_TRANSACCIONES (Blockchain).
+ * Un registro por cobro — la tabla no acepta COBROS_IDS múltiples.
+ */
 const procesarCobrosPagados = async (
   cobrosIds: number[],
   colegioId: number,
+  metodoPago: string,
   t: Transaction,
 ): Promise<void> => {
   for (const cobroId of cobrosIds) {
-    const cobro = await CuentaCobrarModel.findOne({
-      where: { COBRO_ID: cobroId },
-      transaction: t,
-    });
-
+    const cobro = await CuentaCobrarModel.findOne({ where: { COBRO_ID: cobroId }, transaction: t });
     if (!cobro) continue;
 
     const montoPorCobro = Number(cobro.MONTO_ORIGINAL) - Number(cobro.DESCUENTO);
@@ -51,40 +49,41 @@ const procesarCobrosPagados = async (
       { where: { COBRO_ID: cobroId }, transaction: t },
     );
 
-    const concepto = await conceptoRepository.findById(cobro.CONCEPTO_ID, colegioId);
-    if (concepto) {
-      await cuentaBancariaRepository.actualizarSaldo(
-        concepto.CUENTA_DESTINO_ID,
-        colegioId,
-        montoPorCobro,
-      );
-    }
+    // Registrar evidencia inmutable en tabla Blockchain — un INSERT por cobro
+    await transaccionRepository.registrar({
+      COLEGIO_ID: colegioId,
+      COBRO_ID: cobroId,
+      MONTO_PAGO: montoPorCobro,
+      METODO_PAGO: metodoPago,
+    });
   }
 };
 
-export const transaccionService = {
-  obtenerTransaccion: async (transaccionId: number, colegioId: number): Promise<Transaccion> => {
-    const transaccion = await transaccionRepository.findById(transaccionId, colegioId);
-    if (!transaccion) throw new ApiError(404, `Transacción con ID ${transaccionId} no encontrada`);
-    return transaccion;
-  },
+export interface ResultadoInicioPago {
+  urlPago: string;
+  token: string;
+  cotizacion: object;
+}
 
+export const transaccionService = {
+  /**
+   * Inicia el proceso de pago.
+   * Retorna la URL de redirección al banco y el token para confirmar después.
+   * El token se retorna al frontend para que lo guarde temporalmente.
+   */
   iniciarPago: async (data: {
     colegioId: number;
     cobrosIds: number[];
     metodoId: number;
     metodoPagoNombre: string;
-  }): Promise<{ urlPago: string; transaccionId: number; cotizacion: object }> => {
+  }): Promise<ResultadoInicioPago> => {
     const cobros = await cuentaCobrarRepository.findByIds(data.cobrosIds, data.colegioId);
-
-    if (cobros.length !== data.cobrosIds.length) {
+    if (cobros.length !== data.cobrosIds.length)
       throw new ApiError(400, "Uno o más cobros no fueron encontrados");
-    }
 
     const cobrosPendientes = cobros.filter((c) => c.ESTADO === "PENDIENTE");
-    if (cobrosPendientes.length !== cobros.length) {
+    if (cobrosPendientes.length !== cobros.length)
       throw new ApiError(409, "Todos los cobros deben estar en estado PENDIENTE");
-    }
 
     const montoOriginal = cobrosPendientes.reduce(
       (acc, c) => acc + (Number(c.MONTO_ORIGINAL) - Number(c.DESCUENTO)),
@@ -96,95 +95,65 @@ export const transaccionService = {
       data.colegioId,
     );
 
-    const transaccion = await transaccionRepository.create({
-      COLEGIO_ID: data.colegioId,
-      COBRO_IDS: data.cobrosIds.join(","),
-      MONTO_PAGO: cotizacion.montoTotal,
-      METODO_PAGO: data.metodoPagoNombre.toUpperCase(),
-    });
-
     const pasarela = obtenerAdaptadorPasarela(data.metodoPagoNombre);
     const returnUrl = `${process.env.WEBPAY_RETURN_URL || "http://localhost:3005/api/v1/pagos/transacciones"}/retorno`;
 
     const resultado = await pasarela.iniciarPago({
       monto: cotizacion.montoTotal,
       descripcion: `Pago de ${cobrosPendientes.length} cuota(s)`,
-      transaccionId: transaccion.TRANSACCION_ID!,
+      transaccionId: Date.now(),
       returnUrl,
     });
 
-    await transaccionRepository.update(transaccion.TRANSACCION_ID!, {
-      TOKEN_PASARELA: resultado.tokenPasarela,
-      URL_PAGO: resultado.urlPago,
-    });
-
     logger.info("[ms-pagos] Pago iniciado", {
-      transaccionId: transaccion.TRANSACCION_ID,
       monto: cotizacion.montoTotal,
       metodo: data.metodoPagoNombre,
+      cobros: data.cobrosIds,
     });
 
-    return { urlPago: resultado.urlPago, transaccionId: transaccion.TRANSACCION_ID!, cotizacion };
+    return {
+      urlPago: resultado.urlPago,
+      token: resultado.tokenPasarela,
+      cotizacion,
+    };
   },
 
-  confirmarPago: async (token: string): Promise<{ aprobado: boolean; mensaje: string }> => {
-    const transaccion = await transaccionRepository.findByToken(token);
-    if (!transaccion)
-      throw new ApiError(404, "Transacción no encontrada para el token proporcionado");
-    if (transaccion.ESTADO !== "PENDIENTE")
-      throw new ApiError(409, "Esta transacción ya fue procesada");
+  /**
+   * Confirma el pago retornado por la pasarela.
+   * cobrosIds y colegioId vienen del frontend junto al token de retorno.
+   */
+  confirmarPago: async (data: {
+    token: string;
+    cobrosIds: number[];
+    colegioId: number;
+    metodoPago: string;
+  }): Promise<{ aprobado: boolean; mensaje: string }> => {
+    const pasarela = obtenerAdaptadorPasarela(data.metodoPago);
+    const resultado = await pasarela.confirmarPago({ tokenPasarela: data.token });
 
-    const pasarela = obtenerAdaptadorPasarela(transaccion.METODO_PAGO);
-    const resultado = await pasarela.confirmarPago({ tokenPasarela: token });
-
-    await sequelize.transaction(async (t: Transaction) => {
-      if (resultado.aprobado) {
-        await Transaccion.update(
-          { ESTADO: "APROBADA", FECHA_PAGO: new Date() },
-          { where: { TRANSACCION_ID: transaccion.TRANSACCION_ID }, transaction: t },
-        );
-        const cobrosIds = transaccion.COBRO_IDS.split(",").map(Number);
-        await procesarCobrosPagados(cobrosIds, transaccion.COLEGIO_ID, t);
-      } else {
-        await Transaccion.update(
-          { ESTADO: "RECHAZADA" },
-          { where: { TRANSACCION_ID: transaccion.TRANSACCION_ID }, transaction: t },
-        );
-      }
-    });
+    if (resultado.aprobado) {
+      await sequelize.transaction(async (t: Transaction) => {
+        await procesarCobrosPagados(data.cobrosIds, data.colegioId, data.metodoPago, t);
+      });
+    }
 
     logger.info("[ms-pagos] Pago confirmado", {
-      transaccionId: transaccion.TRANSACCION_ID,
       aprobado: resultado.aprobado,
+      cobros: data.cobrosIds,
     });
-
     return { aprobado: resultado.aprobado, mensaje: resultado.mensaje };
   },
 
-  confirmarTransferenciaManual: async (
-    transaccionId: number,
-    colegioId: number,
-  ): Promise<Transaccion> => {
-    const transaccion = await transaccionService.obtenerTransaccion(transaccionId, colegioId);
-    if (transaccion.METODO_PAGO !== METODO_TRANSFERENCIA) {
-      throw new ApiError(
-        409,
-        "Solo se pueden confirmar manualmente transacciones de tipo TRANSFERENCIA",
-      );
-    }
-    if (transaccion.ESTADO !== "PENDIENTE") {
-      throw new ApiError(409, "Esta transacción ya fue procesada");
-    }
-
+  /**
+   * Confirmación manual de transferencia bancaria — ejecutada por el tesorero.
+   */
+  confirmarTransferenciaManual: async (data: {
+    cobrosIds: number[];
+    colegioId: number;
+  }): Promise<void> => {
     await sequelize.transaction(async (t: Transaction) => {
-      await Transaccion.update(
-        { ESTADO: "APROBADA", FECHA_PAGO: new Date() },
-        { where: { TRANSACCION_ID: transaccionId }, transaction: t },
-      );
-      const cobrosIds = transaccion.COBRO_IDS.split(",").map(Number);
-      await procesarCobrosPagados(cobrosIds, colegioId, t);
+      await procesarCobrosPagados(data.cobrosIds, data.colegioId, METODO_TRANSFERENCIA, t);
     });
-
-    return transaccionService.obtenerTransaccion(transaccionId, colegioId);
+    logger.info("[ms-pagos] Transferencia manual confirmada", { cobros: data.cobrosIds });
   },
 };

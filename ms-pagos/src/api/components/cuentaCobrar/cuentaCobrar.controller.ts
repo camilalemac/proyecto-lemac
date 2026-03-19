@@ -85,17 +85,7 @@ export const crearCobro = async (
       TOTAL_CUOTAS,
       MONTO_ORIGINAL,
       FECHA_VENCIMIENTO,
-    } = req.body as {
-      ALUMNO_ID: number;
-      GRUPO_FAMILIAR_ID: number | null;
-      APODERADO_ID: number | null;
-      CONCEPTO_ID: number;
-      DESCRIPCION: string | null;
-      NUMERO_CUOTA: number;
-      TOTAL_CUOTAS: number;
-      MONTO_ORIGINAL: number;
-      FECHA_VENCIMIENTO: Date;
-    };
+    } = req.body as any;
     const cobro = await cuentaCobrarService.crearCobro({
       COLEGIO_ID: req.user!.colegioId,
       ALUMNO_ID,
@@ -122,6 +112,32 @@ export const eliminarCobro = async (
   try {
     await cuentaCobrarService.eliminarCobro(Number(req.params.cobroId), req.user!.colegioId);
     res.status(200).json({ success: true, message: "Cobro eliminado correctamente" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const generarCobroMasivoPorCurso = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const colegioId = req.user!.colegioId;
+    const { CURSO_ID, CONCEPTO_ID, DESCRIPCION, FECHA_VENCIMIENTO, NUMERO_CUOTA, TOTAL_CUOTAS } =
+      req.body as any;
+
+    const resultado = await cuentaCobrarService.generarCobroMasivoPorCurso({
+      COLEGIO_ID: colegioId,
+      CURSO_ID,
+      CONCEPTO_ID,
+      DESCRIPCION,
+      FECHA_VENCIMIENTO,
+      NUMERO_CUOTA,
+      TOTAL_CUOTAS,
+    });
+
+    res.status(201).json({ success: true, data: resultado });
   } catch (err) {
     next(err);
   }

@@ -8,7 +8,7 @@ import {
 import sequelize from "../config/database.config";
 import CuentaCobrar from "./cuentaCobrar.model";
 
-export type EstadoExencion = "PENDIENTE" | "APROBADA" | "RECHAZADA";
+export type EstadoExencion = "PENDIENTE" | "APROBADO" | "RECHAZADO";
 
 export class Exencion extends Model<InferAttributes<Exencion>, InferCreationAttributes<Exencion>> {
   declare EXENCION_ID: CreationOptional<number>;
@@ -16,10 +16,10 @@ export class Exencion extends Model<InferAttributes<Exencion>, InferCreationAttr
   declare COBRO_ID: number;
   declare FECHA_SOLICITUD: CreationOptional<Date>;
   declare MOTIVO: string;
-  declare CHECK_TESORERO: CreationOptional<boolean | null>;
+  declare CHECK_TESORERO: CreationOptional<string>;
   declare FECHA_TESORERO: Date | null;
   declare USER_TESORERO: number | null;
-  declare CHECK_PROFESOR: CreationOptional<boolean | null>;
+  declare CHECK_PROFESOR: CreationOptional<string>;
   declare FECHA_PROFESOR: Date | null;
   declare USER_PROFESOR: number | null;
   declare ESTADO_FINAL: CreationOptional<EstadoExencion>;
@@ -41,38 +41,30 @@ Exencion.init(
     FECHA_SOLICITUD: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     MOTIVO: { type: DataTypes.STRING(500), allowNull: false },
     CHECK_TESORERO: {
-      type: DataTypes.BOOLEAN,
-      allowNull: true,
-      defaultValue: null,
-      comment: "null=pendiente, true=aprobado, false=rechazado",
+      type: DataTypes.CHAR(1),
+      allowNull: false,
+      defaultValue: "N",
+      validate: { isIn: [["S", "N"]] },
+      comment: "S=aprobado, N=pendiente/rechazado",
     },
     FECHA_TESORERO: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
-    USER_TESORERO: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      defaultValue: null,
-      comment: "FK lógica hacia IDN_USUARIOS (tesorero) en MS_IDENTITY",
-    },
+    USER_TESORERO: { type: DataTypes.INTEGER, allowNull: true, defaultValue: null },
     CHECK_PROFESOR: {
-      type: DataTypes.BOOLEAN,
-      allowNull: true,
-      defaultValue: null,
-      comment: "null=pendiente, true=aprobado, false=rechazado",
+      type: DataTypes.CHAR(1),
+      allowNull: false,
+      defaultValue: "N",
+      validate: { isIn: [["S", "N"]] },
+      comment: "S=aprobado, N=pendiente/rechazado",
     },
     FECHA_PROFESOR: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
-    USER_PROFESOR: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      defaultValue: null,
-      comment: "FK lógica hacia IDN_USUARIOS (profesor) en MS_IDENTITY",
-    },
+    USER_PROFESOR: { type: DataTypes.INTEGER, allowNull: true, defaultValue: null },
     ESTADO_FINAL: {
       type: DataTypes.STRING(20),
       allowNull: false,
       defaultValue: "PENDIENTE",
-      validate: { isIn: [["PENDIENTE", "APROBADA", "RECHAZADA"]] },
+      validate: { isIn: [["PENDIENTE", "APROBADO", "RECHAZADO"]] },
     },
-    OBSERVACION_RECHAZO: { type: DataTypes.STRING(500), allowNull: true, defaultValue: null },
+    OBSERVACION_RECHAZO: { type: DataTypes.STRING(200), allowNull: true, defaultValue: null },
     FECHA_CREACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     FECHA_ACTUALIZACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     FECHA_BAJA: { type: DataTypes.DATE, allowNull: true, defaultValue: null },

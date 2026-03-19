@@ -13,11 +13,11 @@ export class CuentaBancaria extends Model<
 > {
   declare CUENTA_ID: CreationOptional<number>;
   declare COLEGIO_ID: number;
-  declare CURSO_ID: number | null;
+  declare CURSO_ID: number;
   declare NOMBRE_CUENTA: string;
-  declare BANCO: string;
+  declare BANCO: string | null;
   declare SALDO_ACTUAL: CreationOptional<number>;
-  declare ACTIVO: CreationOptional<boolean>;
+  declare ACTIVO: CreationOptional<string>;
   declare FECHA_CREACION: CreationOptional<Date>;
   declare FECHA_ACTUALIZACION: CreationOptional<Date>;
   declare FECHA_BAJA: CreationOptional<Date | null>;
@@ -29,14 +29,18 @@ CuentaBancaria.init(
     COLEGIO_ID: { type: DataTypes.INTEGER, allowNull: false },
     CURSO_ID: {
       type: DataTypes.INTEGER,
-      allowNull: true,
-      defaultValue: null,
+      allowNull: false,
       comment: "FK lógica hacia ACA_CURSOS en MS_ACADEMICO",
     },
-    NOMBRE_CUENTA: { type: DataTypes.STRING(100), allowNull: false },
-    BANCO: { type: DataTypes.STRING(100), allowNull: false },
-    SALDO_ACTUAL: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
-    ACTIVO: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    NOMBRE_CUENTA: { type: DataTypes.STRING(50), allowNull: false },
+    BANCO: { type: DataTypes.STRING(50), allowNull: true, defaultValue: null },
+    SALDO_ACTUAL: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    ACTIVO: {
+      type: DataTypes.CHAR(1),
+      allowNull: false,
+      defaultValue: "S",
+      validate: { isIn: [["S", "N"]] },
+    },
     FECHA_CREACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     FECHA_ACTUALIZACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     FECHA_BAJA: { type: DataTypes.DATE, allowNull: true, defaultValue: null },

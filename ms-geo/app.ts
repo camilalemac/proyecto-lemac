@@ -8,52 +8,39 @@ import geoRoutes from './src/api/components/geo.routes';
 
 const app: Application = express();
 
-// ==========================================
-// 1. MIDDLEWARES DE SEGURIDAD (ISO 27001 - A.10 / A.12)
-// ==========================================
-app.use(helmet()); // Oculta cabeceras de Express y protege contra vulnerabilidades web comunes
-app.use(cors()); // Habilita Cross-Origin Resource Sharing
-app.use(express.json({ limit: '1mb' })); // Previene ataques de payload gigante
+// 1. Middlewares de seguridad y parsing
+app.use(helmet());
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use('/api/v1/geo', geoRoutes);
-// Rate Limiting: Previene ataques de fuerza bruta y denegación de servicio (DDoS)
-const rateLimiter = new RateLimiterMemory({
-  points: 20, // Máximo 20 peticiones
-  duration: 1, // Por segundo, por IP
+
+// 2. Auditoría y Logs (Primero para rastrear todo)
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  logger.info(`Incoming request: [${req.method}] ${req.url}`);
+  next();
 });
 
+// 3. Rate Limiting
+const rateLimiter = new RateLimiterMemory({ points: 20, duration: 1 });
 app.use((req: Request, res: Response, next: NextFunction) => {
   rateLimiter
     .consume(req.ip || 'unknown')
     .then(() => next())
     .catch(() => {
       logger.warn(`Rate limit excedido para la IP: ${req.ip}`);
-      res
-        .status(429)
-        .json({ success: false, message: 'Demasiadas solicitudes, intente más tarde.' });
+      res.status(429).json({ success: false, message: 'Demasiadas solicitudes.' });
     });
 });
 
-// Middleware de auditoría HTTP básico
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  logger.info(`Incoming request: [${req.method}] ${req.url}`);
-  next();
-});
-
-// ==========================================
-// 2. RUTAS (Healthcheck)
-// ==========================================
-// Endpoint básico para que el Gateway sepa que el microservicio está vivo
+// 4. Rutas
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ success: true, service: 'ms-geo', status: 'UP' });
 });
 
-// Aquí inyectaremos las rutas de 'geo' más adelante
+// Esta es la ruta que te daba 404 en las pruebas del Gateway
+app.use('/api/v1/geo', geoRoutes);
 
-// ==========================================
-// 3. MANEJO CENTRALIZADO DE ERRORES
-// ==========================================
-// Debe ser el último middleware en ser inyectado
+// 5. Manejo Centralizado de Errores (ULTIMO)
 app.use(errorHandler);
 
 export default app;

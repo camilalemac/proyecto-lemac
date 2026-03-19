@@ -75,9 +75,9 @@ export const vincularApoderadoAlumno = async (
       ALUMNO_ID,
       APODERADO_ID,
       TIPO_RELACION,
-      ES_APODERADO_ACAD,
-      ES_TITULAR_FINAN,
-      AUTORIZADO_RETIRO,
+      ES_APODERADO_ACAD: ES_APODERADO_ACAD ? "S" : "N",
+      ES_TITULAR_FINAN: ES_TITULAR_FINAN ? "S" : "N",
+      AUTORIZADO_RETIRO: AUTORIZADO_RETIRO ? "S" : "N",
     });
 
     res.status(201).json({ success: true, data: relacion });
@@ -101,7 +101,17 @@ export const actualizarRelacion = async (
       AUTORIZADO_RETIRO: boolean;
     }>;
 
-    const relacion = await familiaService.actualizarRelacion(relacionId, colegioId, data);
+    const dataMapeada = {
+      TIPO_RELACION: data.TIPO_RELACION,
+      ES_APODERADO_ACAD:
+        data.ES_APODERADO_ACAD !== undefined ? (data.ES_APODERADO_ACAD ? "S" : "N") : undefined,
+      ES_TITULAR_FINAN:
+        data.ES_TITULAR_FINAN !== undefined ? (data.ES_TITULAR_FINAN ? "S" : "N") : undefined,
+      AUTORIZADO_RETIRO:
+        data.AUTORIZADO_RETIRO !== undefined ? (data.AUTORIZADO_RETIRO ? "S" : "N") : undefined,
+    };
+
+    const relacion = await familiaService.actualizarRelacion(relacionId, colegioId, dataMapeada);
     res.status(200).json({ success: true, data: relacion });
   } catch (err) {
     next(err);

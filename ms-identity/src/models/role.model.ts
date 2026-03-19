@@ -1,20 +1,11 @@
-import {
-  Model,
-  DataTypes,
-  InferAttributes,
-  InferCreationAttributes,
-} from "sequelize";
+import { Model, DataTypes, InferAttributes, InferCreationAttributes } from "sequelize";
 import sequelize from "../config/database.config";
 
-export class Role extends Model<
-  InferAttributes<Role>,
-  InferCreationAttributes<Role>
-> {
+export class Role extends Model<InferAttributes<Role>, InferCreationAttributes<Role>> {
   declare rolCode: string;
   declare nombreRol: string;
   declare categoria?: string;
   declare nivelAcceso?: number;
-  declare estado?: string;
 }
 
 Role.init(
@@ -36,10 +27,6 @@ Role.init(
     nivelAcceso: {
       type: DataTypes.INTEGER,
       field: "NIVEL_ACCESO",
-    },
-    estado: {
-      type: DataTypes.STRING,
-      field: "ESTADO",
     },
   },
   {

@@ -1,10 +1,7 @@
-import sequelize from "../../../config/database.config";
 import { movimientoCajaRepository } from "./movimientoCaja.repository";
 import { cuentaBancariaRepository } from "../cuentaBancaria/cuentaBancaria.repository";
 import { ApiError } from "../../../utils/ApiError";
 import MovimientoCaja, { TipoMovimiento } from "../../../models/movimientoCaja.model";
-import MovimientoCajaModel from "../../../models/movimientoCaja.model";
-import CuentaBancariaModel from "../../../models/cuentaBancaria.model";
 
 export const movimientoCajaService = {
   listarMovimientosPorCuenta: async (
@@ -33,24 +30,18 @@ export const movimientoCajaService = {
   }): Promise<MovimientoCaja> => {
     const cuenta = await cuentaBancariaRepository.findById(data.CUENTA_ID, data.COLEGIO_ID);
     if (!cuenta) throw new ApiError(404, `Cuenta bancaria con ID ${data.CUENTA_ID} no encontrada`);
-    if (!cuenta.ACTIVO) throw new ApiError(409, "La cuenta bancaria no está activa");
+    if (cuenta.ACTIVO !== "S") throw new ApiError(409, "La cuenta bancaria no está activa");
 
     if (data.TIPO_MOVIMIENTO === "EGRESO") {
       const saldoActual = Number(cuenta.SALDO_ACTUAL);
-      if (saldoActual < data.MONTO)
+      if (saldoActual < data.MONTO) {
         throw new ApiError(409, `Saldo insuficiente. Saldo actual: $${saldoActual}`);
+      }
     }
 
-    return await sequelize.transaction(async (t) => {
-      const movimiento = await MovimientoCajaModel.create(data, { transaction: t });
-      const incremento = data.TIPO_MOVIMIENTO === "INGRESO" ? data.MONTO : -data.MONTO;
-      const nuevoSaldo = Number(cuenta.SALDO_ACTUAL) + incremento;
-      await CuentaBancariaModel.update(
-        { SALDO_ACTUAL: nuevoSaldo },
-        { where: { CUENTA_ID: data.CUENTA_ID }, transaction: t },
-      );
-      return movimiento;
-    });
+    // El trigger trg_actualizar_saldo_banco en Oracle actualiza el saldo automáticamente
+    // al insertar el movimiento. No es necesario hacerlo manualmente.
+    return movimientoCajaRepository.create(data);
   },
 
   eliminarMovimiento: async (movimientoId: number, colegioId: number): Promise<void> => {

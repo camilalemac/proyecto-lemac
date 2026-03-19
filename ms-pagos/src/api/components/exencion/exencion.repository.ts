@@ -43,11 +43,11 @@ export const exencionRepository = {
   registrarRevisionProfesor: async (
     exencionId: number,
     colegioId: number,
-    aprobado: boolean,
+    check: string,
     userId: number,
   ): Promise<[number]> => {
     return Exencion.update(
-      { CHECK_PROFESOR: aprobado, FECHA_PROFESOR: new Date(), USER_PROFESOR: userId },
+      { CHECK_PROFESOR: check, FECHA_PROFESOR: new Date(), USER_PROFESOR: userId },
       { where: { EXENCION_ID: exencionId, COLEGIO_ID: colegioId } as WhereOptions },
     );
   },
@@ -55,13 +55,13 @@ export const exencionRepository = {
   registrarRevisionTesorero: async (
     exencionId: number,
     colegioId: number,
-    aprobado: boolean,
+    check: string,
     userId: number,
     observacion: string | null,
   ): Promise<[number]> => {
     return Exencion.update(
       {
-        CHECK_TESORERO: aprobado,
+        CHECK_TESORERO: check,
         FECHA_TESORERO: new Date(),
         USER_TESORERO: userId,
         OBSERVACION_RECHAZO: observacion,
@@ -73,7 +73,7 @@ export const exencionRepository = {
   actualizarEstadoFinal: async (
     exencionId: number,
     colegioId: number,
-    estadoFinal: "APROBADA" | "RECHAZADA",
+    estadoFinal: "APROBADO" | "RECHAZADO",
   ): Promise<[number]> => {
     return Exencion.update(
       { ESTADO_FINAL: estadoFinal },

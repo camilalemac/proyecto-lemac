@@ -14,7 +14,7 @@ export const cuentaBancariaRepository = {
 
   findByCurso: async (cursoId: number, colegioId: number): Promise<CuentaBancaria | null> => {
     return CuentaBancaria.findOne({
-      where: { CURSO_ID: cursoId, COLEGIO_ID: colegioId, ACTIVO: true } as WhereOptions,
+      where: { CURSO_ID: cursoId, COLEGIO_ID: colegioId, ACTIVO: "S" } as WhereOptions,
     });
   },
 
@@ -22,36 +22,19 @@ export const cuentaBancariaRepository = {
     COLEGIO_ID: number;
     CURSO_ID: number | null;
     NOMBRE_CUENTA: string;
-    BANCO: string;
+    BANCO: string | null;
   }): Promise<CuentaBancaria> => {
-    return CuentaBancaria.create(data);
+    return CuentaBancaria.create(data as any);
   },
 
   update: async (
     cuentaId: number,
     colegioId: number,
-    data: Partial<{ NOMBRE_CUENTA: string; BANCO: string; ACTIVO: boolean }>,
+    data: Partial<{ NOMBRE_CUENTA: string; BANCO: string; ACTIVO: string }>,
   ): Promise<[number]> => {
     return CuentaBancaria.update(data, {
       where: { CUENTA_ID: cuentaId, COLEGIO_ID: colegioId } as WhereOptions,
     });
-  },
-
-  actualizarSaldo: async (
-    cuentaId: number,
-    colegioId: number,
-    incremento: number,
-  ): Promise<void> => {
-    const cuenta = await CuentaBancaria.findOne({
-      where: { CUENTA_ID: cuentaId, COLEGIO_ID: colegioId } as WhereOptions,
-    });
-    if (cuenta) {
-      const nuevoSaldo = Number(cuenta.SALDO_ACTUAL) + incremento;
-      await CuentaBancaria.update(
-        { SALDO_ACTUAL: nuevoSaldo },
-        { where: { CUENTA_ID: cuentaId } as WhereOptions },
-      );
-    }
   },
 
   softDelete: async (cuentaId: number, colegioId: number): Promise<number> => {

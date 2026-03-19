@@ -5,11 +5,11 @@ import { ApiError } from "../../../utils/ApiError";
 import Curso from "../../../models/curso.model";
 
 export const cursoService = {
-  listarCursos: async (colegioId: number, periodoId?: number): Promise<Curso[]> => {
+  listarCursos: async (colegioId: number, periodoId?: number): Promise<any[]> => {
     return cursoRepository.findAllByColegio(colegioId, periodoId);
   },
 
-  obtenerCurso: async (cursoId: number, colegioId: number): Promise<Curso> => {
+  obtenerCurso: async (cursoId: number, colegioId: number): Promise<any> => {
     const curso = await cursoRepository.findById(cursoId, colegioId);
     if (!curso) {
       throw ApiError.notFound(`Curso con ID ${cursoId} no encontrado`);
@@ -17,7 +17,7 @@ export const cursoService = {
     return curso;
   },
 
-  obtenerCursoDelProfesor: async (profesorJefeId: number, colegioId: number): Promise<Curso> => {
+  obtenerCursoDelProfesor: async (profesorJefeId: number, colegioId: number): Promise<any> => {
     const curso = await cursoRepository.findByProfesorJefe(profesorJefeId, colegioId);
     if (!curso) {
       throw ApiError.notFound("El profesor no tiene un curso asignado como profesor jefe");

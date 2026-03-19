@@ -25,7 +25,6 @@ export const iniciarPago = async (
   }
 };
 
-// Retorno de Webpay — redirige desde el banco con token_ws
 export const retornoWebpay = async (
   req: Request,
   res: Response,
@@ -33,18 +32,24 @@ export const retornoWebpay = async (
 ): Promise<void> => {
   try {
     const token = (req.query.token_ws || req.body.token_ws) as string;
+    const cobrosIds = req.body.cobrosIds as number[];
+    const colegioId = req.body.colegioId as number;
     if (!token) {
       res.status(400).json({ success: false, message: "Token no proporcionado" });
       return;
     }
-    const resultado = await transaccionService.confirmarPago(token);
+    const resultado = await transaccionService.confirmarPago({
+      token,
+      cobrosIds,
+      colegioId,
+      metodoPago: "WEBPAY",
+    });
     res.status(200).json({ success: true, data: resultado });
   } catch (err) {
     next(err);
   }
 };
 
-// Retorno de Khipu — redirige desde el banco con payment_id
 export const retornoKhipu = async (
   req: Request,
   res: Response,
@@ -52,35 +57,36 @@ export const retornoKhipu = async (
 ): Promise<void> => {
   try {
     const paymentId = (req.query.payment_id || req.body.payment_id) as string;
+    const cobrosIds = req.body.cobrosIds as number[];
+    const colegioId = req.body.colegioId as number;
     if (!paymentId) {
       res.status(400).json({ success: false, message: "payment_id no proporcionado" });
       return;
     }
-    const resultado = await transaccionService.confirmarPago(paymentId);
+    const resultado = await transaccionService.confirmarPago({
+      token: paymentId,
+      cobrosIds,
+      colegioId,
+      metodoPago: "KHIPU",
+    });
     res.status(200).json({ success: true, data: resultado });
   } catch (err) {
     next(err);
   }
 };
 
-// Confirmación manual de transferencia por el tesorero
 export const confirmarTransferenciaManual = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const transaccion = await transaccionService.confirmarTransferenciaManual(
-      Number(req.params.transaccionId),
-      req.user!.colegioId,
-    );
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Transferencia confirmada correctamente",
-        data: transaccion,
-      });
+    const { cobrosIds } = req.body as { cobrosIds: number[] };
+    await transaccionService.confirmarTransferenciaManual({
+      cobrosIds,
+      colegioId: req.user!.colegioId,
+    });
+    res.status(200).json({ success: true, message: "Transferencia confirmada correctamente" });
   } catch (err) {
     next(err);
   }

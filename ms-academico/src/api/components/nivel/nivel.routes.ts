@@ -12,12 +12,21 @@ router.get(
   "/",
   checkJwt,
   checkPermissions([
-    "administrador",
-    "directora",
-    "profesor",
-    "tesorero",
-    "secretario",
-    "presidente",
+    "SYS_ADMIN", // Administrador
+    "STF_DIR", // Directora
+    "STF_PROF", // Profesor
+    "DIR_PRES_ALU",
+    "DIR_PRES_APO",
+    "CEN_PRES_CAL",
+    "CEN_PRES_CAP", // Presidentes
+    "DIR_TES_ALU",
+    "DIR_TES_APO",
+    "CEN_TES_CAL",
+    "CEN_TES_CAP", // Tesoreros
+    "DIR_SEC_ALU",
+    "DIR_SEC_APO",
+    "CEN_SEC_CAL",
+    "CEN_SEC_CAP", // Secretarios
   ]),
   nivelController.listarNiveles,
 );
@@ -27,12 +36,21 @@ router.get(
   "/:nivelId",
   checkJwt,
   checkPermissions([
-    "administrador",
-    "directora",
-    "profesor",
-    "tesorero",
-    "secretario",
-    "presidente",
+    "SYS_ADMIN",
+    "STF_DIR",
+    "STF_PROF",
+    "DIR_PRES_ALU",
+    "DIR_PRES_APO",
+    "CEN_PRES_CAL",
+    "CEN_PRES_CAP",
+    "DIR_TES_ALU",
+    "DIR_TES_APO",
+    "CEN_TES_CAL",
+    "CEN_TES_CAP",
+    "DIR_SEC_ALU",
+    "DIR_SEC_APO",
+    "CEN_SEC_CAL",
+    "CEN_SEC_CAP",
   ]),
   validateNivelId,
   runValidation,
@@ -43,7 +61,7 @@ router.get(
 router.post(
   "/",
   checkJwt,
-  checkPermissions(["administrador"]),
+  checkPermissions(["SYS_ADMIN"]), // Solo el administrador crea
   validateCrearNivel,
   runValidation,
   nivelController.crearNivel,
@@ -53,7 +71,7 @@ router.post(
 router.put(
   "/:nivelId",
   checkJwt,
-  checkPermissions(["administrador"]),
+  checkPermissions(["SYS_ADMIN"]), // Solo el administrador actualiza
   validateActualizarNivel,
   runValidation,
   nivelController.actualizarNivel,
@@ -63,7 +81,7 @@ router.put(
 router.delete(
   "/:nivelId",
   checkJwt,
-  checkPermissions(["administrador"]),
+  checkPermissions(["SYS_ADMIN"]), // Solo el administrador elimina
   validateNivelId,
   runValidation,
   nivelController.eliminarNivel,

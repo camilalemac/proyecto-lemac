@@ -1,21 +1,14 @@
-import {
-  Model,
-  DataTypes,
-  InferAttributes,
-  InferCreationAttributes,
-} from "sequelize";
+import { Model, DataTypes, InferAttributes, InferCreationAttributes } from "sequelize";
 import sequelize from "../config/database.config";
 import { Identity } from "./identity.model";
 import { Role } from "./role.model";
 
-export class UserRole extends Model<
-  InferAttributes<UserRole>,
-  InferCreationAttributes<UserRole>
-> {
+export class UserRole extends Model<InferAttributes<UserRole>, InferCreationAttributes<UserRole>> {
   declare asignacionId?: number;
   declare userId: number;
   declare rolCode: string;
   declare contextoId?: number;
+  declare estado?: string;
 }
 
 UserRole.init(
@@ -40,6 +33,11 @@ UserRole.init(
       type: DataTypes.INTEGER,
       field: "CONTEXTO_ID",
     },
+    estado: {
+      type: DataTypes.STRING,
+      defaultValue: "ACTIVO",
+      field: "ESTADO",
+    },
   },
   {
     sequelize,
@@ -51,15 +49,19 @@ UserRole.init(
 
 Identity.belongsToMany(Role, {
   through: UserRole,
-  foreignKey: "USER_ID",
-  otherKey: "ROL_CODE",
+  foreignKey: "userId",
+  otherKey: "rolCode",
+  sourceKey: "userId",
+  targetKey: "rolCode",
   as: "roles",
 });
 
 Role.belongsToMany(Identity, {
   through: UserRole,
-  foreignKey: "ROL_CODE",
-  otherKey: "USER_ID",
+  foreignKey: "rolCode",
+  otherKey: "userId",
+  sourceKey: "rolCode",
+  targetKey: "userId",
   as: "users",
 });
 

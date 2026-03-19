@@ -7,8 +7,6 @@ import Transaccion from "./transaccion.model";
 import MovimientoCaja from "./movimientoCaja.model";
 import Exencion from "./exencion.model";
 
-// Las asociaciones se definen en cada modelo para mantener cohesión.
-// Este índice centraliza las exportaciones para importación limpia.
 export {
   Categoria,
   MetodoPago,

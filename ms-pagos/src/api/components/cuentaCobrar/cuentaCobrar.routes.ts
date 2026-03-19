@@ -12,13 +12,14 @@ import { checkPermissions } from "../../middlewares/checkPermissions.middleware"
 
 const router = Router();
 
-// Alumno y apoderado ven sus propias cuotas
+// 1. RUTAS ESTÁTICAS PRIMERO (¡Muy importante para evitar conflictos!)
 router.get(
   "/mis-cobros",
   checkJwt,
   checkPermissions(["alumno", "apoderado"]),
   cuentaCobrarController.listarMisCobros,
 );
+
 router.get(
   "/mis-cobros/resumen",
   checkJwt,
@@ -26,7 +27,17 @@ router.get(
   cuentaCobrarController.resumenMisCobros,
 );
 
-// Vista administrativa por alumno
+// NUESTRA NUEVA RUTA: POST /api/v1/pagos/cuentas-cobrar/curso/masivo
+// POST /api/v1/pagos/cuentas-cobrar/curso/masivo
+router.post(
+  "/curso/masivo",
+  checkJwt as any,
+  // Cambiamos los nombres por los que tu sistema reconoce (UserRole)
+  checkPermissions(["administrador", "tesorero", "directora"]) as any,
+  cuentaCobrarController.generarCobroMasivoPorCurso as any,
+);
+
+// 2. RUTAS DINÁMICAS DESPUÉS (las que tienen :id)
 router.get(
   "/alumno/:alumnoId",
   checkJwt,
@@ -35,6 +46,7 @@ router.get(
   runValidation,
   cuentaCobrarController.listarCobrosPorAlumno,
 );
+
 router.get(
   "/alumno/:alumnoId/resumen",
   checkJwt,
@@ -52,6 +64,7 @@ router.post(
   runValidation,
   cuentaCobrarController.crearCobro,
 );
+
 router.delete(
   "/:cobroId",
   checkJwt,

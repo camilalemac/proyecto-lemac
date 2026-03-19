@@ -1,91 +1,52 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import { createProxyMiddleware } from "http-proxy-middleware";
+import { createProxyMiddleware, fixRequestBody } from "http-proxy-middleware";
 import { errorHandler } from "./src/api/middlewares/errorHandler.middleware";
 import { logger } from "./src/utils/logger";
-
 import "dotenv/config";
 
 const app = express();
+
+// 1. Configuración de base (Sin express.json() aquí para evitar conflictos con el proxy)
 app.use(helmet());
 app.use(cors());
+
+const services: { [key: string]: string } = {
+  auth: process.env.MS_AUTH_URL || "http://localhost:3001",
+  identity: process.env.MS_IDENTITY_URL || "http://localhost:3003",
+  geo: process.env.MS_GEO_URL || "http://localhost:3000",
+  academico: process.env.MS_ACADEMICO_URL || "http://localhost:3004",
+  pagos: process.env.MS_PAGOS_URL || "http://localhost:3005",
+  documentos: process.env.MS_DOCUMENTOS_URL || "http://localhost:3006", // Asegúrate de que este puerto sea el correcto
+};
+
+// 2. Configuración de Proxies (Ordenados y Limpios)
+Object.entries(services).forEach(([name, target]) => {
+  const context = `/api/v1/${name}`;
+
+  app.use(
+    context,
+    createProxyMiddleware({
+      target,
+      changeOrigin: true,
+      pathRewrite: (path) => path, // Mantiene la URL intacta (/api/v1/geo/regiones llega igual al micro)
+      on: {
+        proxyReq: fixRequestBody,
+        error: (err, req, res: any) => {
+          logger.error(`[GATEWAY] Error en proxy ${name}:`, err);
+          res
+            .status(502)
+            .json({ success: false, message: `${name} service unavailable` });
+        },
+      },
+    }),
+  );
+});
+
+// 3. Middlewares locales (Solo se ejecutan si la petición NO entró a un proxy)
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-app.use((req, _res, next) => {
-  logger.info("[ms-gateway] Incoming request", {
-    method: req.method,
-    path: req.path,
-  });
-  next();
-});
-
-const msAcademicoUrl = process.env.MS_ACADEMICO_URL || "http://localhost:3004";
-const msAuthUrl = process.env.MS_AUTH_URL || "http://localhost:3001";
-const msGeoUrl = process.env.MS_GEO_URL || "http://localhost:3002";
-const msIdentityUrl = process.env.MS_IDENTITY_URL || "http://localhost:3003";
-
-app.get("/health", (_req, res) => {
-  res.status(200).json({ success: true, service: "ms-gateway", status: "UP" });
-});
-
-const authProxy = createProxyMiddleware({
-  target: msAuthUrl,
-  changeOrigin: true,
-  pathRewrite: { "^/api/v1/auth": "/api/v1/auth" },
-}) as any;
-
-authProxy.on("error", (err: any, req: any, res: any) => {
-  logger.error("Proxy auth error", { err, url: req.url });
-  res.status(502).json({ success: false, message: "Auth service unavailable" });
-});
-
-app.use("/api/v1/auth", authProxy);
-
-const geoProxy = createProxyMiddleware({
-  target: msGeoUrl,
-  changeOrigin: true,
-  pathRewrite: { "^/api/v1/geo": "/api/v1/geo" },
-}) as any;
-
-geoProxy.on("error", (err: any, req: any, res: any) => {
-  logger.error("Proxy geo error", { err, url: req.url });
-  res.status(502).json({ success: false, message: "Geo service unavailable" });
-});
-
-app.use("/api/v1/geo", geoProxy);
-
-const identityProxy = createProxyMiddleware({
-  target: msIdentityUrl,
-  changeOrigin: true,
-  pathRewrite: { "^/api/v1/identity": "/api/v1/identity" },
-}) as any;
-
-identityProxy.on("error", (err: any, req: any, res: any) => {
-  logger.error("Proxy identity error", { err, url: req.url });
-  res
-    .status(502)
-    .json({ success: false, message: "Identity service unavailable" });
-});
-
-app.use("/api/v1/identity", identityProxy);
-
-app.use(errorHandler(logger));
+app.use("/health", (_req, res) => res.status(200).json({ status: "UP" }));
+app.use(errorHandler);
 
 export default app;
-
-const academicoProxy = createProxyMiddleware({
-  target: msAcademicoUrl,
-  changeOrigin: true,
-  pathRewrite: { "^/api/v1/academico": "/api/v1/academico" },
-}) as any;
-
-academicoProxy.on("error", (err: any, req: any, res: any) => {
-  logger.error("Proxy academico error", { err, url: req.url });
-  res
-    .status(502)
-    .json({ success: false, message: "Academic service unavailable" });
-});
-
-app.use("/api/v1/academico", academicoProxy);

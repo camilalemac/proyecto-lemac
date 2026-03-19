@@ -4,117 +4,37 @@ import {
   validateRegister,
   validateLogin,
   validateRefresh,
+  validateFindByRut,
 } from "./identity.validation";
 import { runValidation } from "../../middlewares/validation.middleware";
 import { checkJwt } from "../../middlewares/checkJwt.middleware";
-import { checkPermissions } from "../../middlewares/checkPermissions.middleware";
 
 const router = Router();
 
-router.post(
-  "/register",
-  validateRegister,
-  runValidation,
-  identityController.register,
-);
+// POST /api/v1/identity/register
+router.post("/register", validateRegister, runValidation, identityController.register);
+
+// POST /api/v1/identity/login
 router.post("/login", validateLogin, runValidation, identityController.login);
-router.post(
-  "/refresh",
-  validateRefresh,
-  runValidation,
-  identityController.refresh,
-);
+
+// POST /api/v1/identity/refresh
+router.post("/refresh", validateRefresh, runValidation, identityController.refresh);
+
+// POST /api/v1/identity/logout
 router.post("/logout", checkJwt, identityController.logout);
+
+// GET /api/v1/identity/me
 router.get("/me", checkJwt, identityController.me);
 
-// Funcionalidades de cuotas y gastos
+router.post("/", identityController.createUser);
+// GET /api/v1/identity/buscar-por-rut
+// Usado por ms-academico para vincular apoderado con alumno por RUT
 router.get(
-  "/cuotas",
+  "/buscar-por-rut",
   checkJwt,
-  checkPermissions([
-    "alumno",
-    "apoderado",
-    "profesor",
-    "tesorero",
-    "presidente",
-    "directora",
-    "administrador",
-  ]),
-  identityController.getCuotas,
-);
-router.get(
-  "/gastos",
-  checkJwt,
-  checkPermissions([
-    "alumno",
-    "apoderado",
-    "profesor",
-    "tesorero",
-    "presidente",
-    "directora",
-    "administrador",
-  ]),
-  identityController.getGastosPorCategoria,
-);
-
-// Funcionalidades de pago y grupo familiar
-router.post(
-  "/pagos/bono-cooperacion",
-  checkJwt,
-  checkPermissions(["apoderado", "tesorero", "presidente", "administrador"]),
-  identityController.pagarBonoCooperacion,
-);
-router.post(
-  "/pagos/cuotas",
-  checkJwt,
-  checkPermissions(["apoderado", "tesorero", "presidente", "administrador"]),
-  identityController.pagarCuotas,
-);
-router.get(
-  "/grupo-familiar",
-  checkJwt,
-  checkPermissions(["apoderado", "administrador"]),
-  identityController.getGrupoFamiliar,
-);
-
-// Funcionalidades profesor
-router.get(
-  "/curso/alumnos",
-  checkJwt,
-  checkPermissions(["profesor", "tesorero", "presidente", "administrador"]),
-  identityController.getAlumnosCurso,
-);
-router.post(
-  "/curso/promocion",
-  checkJwt,
-  checkPermissions(["profesor", "administrador"]),
-  identityController.promoverAlumnos,
-);
-router.post(
-  "/curso/exencion",
-  checkJwt,
-  checkPermissions(["profesor", "tesorero", "administrador"]),
-  identityController.exencionPagos,
-);
-router.post(
-  "/curso/validar-cuenta-alumno",
-  checkJwt,
-  checkPermissions(["profesor", "administrador"]),
-  identityController.validarCuentaAlumno,
-);
-
-// Funcionalidades centro/apoderados
-router.post(
-  "/reportes",
-  checkJwt,
-  checkPermissions(["tesorero", "presidente", "administrador"]),
-  identityController.generarReportes,
-);
-router.post(
-  "/cuentas",
-  checkJwt,
-  checkPermissions(["tesorero", "administrador"]),
-  identityController.agregarCuentaPago,
+  validateFindByRut,
+  runValidation,
+  identityController.findByRut,
 );
 
 export default router;

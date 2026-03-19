@@ -7,7 +7,6 @@ import { checkPermissions } from "../../middlewares/checkPermissions.middleware"
 
 const router = Router();
 
-// Inicia el pago — apoderado elige cobros y método
 router.post(
   "/iniciar",
   checkJwt,
@@ -16,16 +15,12 @@ router.post(
   runValidation,
   transaccionController.iniciarPago,
 );
-
-// Retornos de pasarelas — sin JWT porque el banco redirige aquí directamente
 router.get("/webpay/retorno", transaccionController.retornoWebpay);
 router.post("/webpay/retorno", transaccionController.retornoWebpay);
 router.get("/khipu/retorno", transaccionController.retornoKhipu);
 router.get("/khipu/cancelado", transaccionController.canceladoKhipu);
-
-// Confirmación manual de transferencia — solo tesorero
-router.patch(
-  "/:transaccionId/confirmar-transferencia",
+router.post(
+  "/confirmar-transferencia",
   checkJwt,
   checkPermissions(["tesorero", "administrador"]),
   validateConfirmarManual,

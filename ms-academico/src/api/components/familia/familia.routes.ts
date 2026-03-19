@@ -17,16 +17,16 @@ const router = Router();
 router.get(
   "/mis-hijos",
   checkJwt,
-  checkPermissions(["apoderado"]),
+  checkPermissions(["FAM_APO"]),
   familiaController.obtenerMisFamiliares,
 );
 
 // GET /api/v1/academico/familias/alumno/:alumnoId
-// Administrador o profesor ve los apoderados de un alumno específico
+// Administrador, directora o profesor ve los apoderados de un alumno específico
 router.get(
   "/alumno/:alumnoId",
   checkJwt,
-  checkPermissions(["administrador", "directora", "profesor"]),
+  checkPermissions(["SYS_ADMIN", "STF_DIR", "STF_PROF"]),
   validateAlumnoIdParam,
   runValidation,
   familiaController.obtenerFamiliaDelAlumno,
@@ -36,7 +36,7 @@ router.get(
 router.get(
   "/:relacionId",
   checkJwt,
-  checkPermissions(["administrador", "directora", "profesor"]),
+  checkPermissions(["SYS_ADMIN", "STF_DIR", "STF_PROF"]),
   validateRelacionId,
   runValidation,
   familiaController.obtenerRelacion,
@@ -47,7 +47,7 @@ router.get(
 router.post(
   "/",
   checkJwt,
-  checkPermissions(["administrador", "apoderado"]),
+  checkPermissions(["SYS_ADMIN", "FAM_APO"]),
   validateVincularApoderado,
   runValidation,
   familiaController.vincularApoderadoAlumno,
@@ -57,7 +57,7 @@ router.post(
 router.put(
   "/:relacionId",
   checkJwt,
-  checkPermissions(["administrador"]),
+  checkPermissions(["SYS_ADMIN"]),
   validateActualizarRelacion,
   runValidation,
   familiaController.actualizarRelacion,
@@ -67,7 +67,7 @@ router.put(
 router.delete(
   "/:relacionId",
   checkJwt,
-  checkPermissions(["administrador"]),
+  checkPermissions(["SYS_ADMIN"]),
   validateRelacionId,
   runValidation,
   familiaController.desvincularRelacion,

@@ -16,8 +16,8 @@ export class Concepto extends Model<InferAttributes<Concepto>, InferCreationAttr
   declare CODIGO: string;
   declare NOMBRE: string;
   declare MONTO_BASE: number;
-  declare TIPO_COBRO: string;
-  declare ACTIVO: CreationOptional<boolean>;
+  declare TIPO_COBRO: CreationOptional<string>;
+  declare ACTIVO: CreationOptional<string>;
   declare FECHA_CREACION: CreationOptional<Date>;
   declare FECHA_ACTUALIZACION: CreationOptional<Date>;
   declare FECHA_BAJA: CreationOptional<Date | null>;
@@ -32,20 +32,17 @@ Concepto.init(
       allowNull: false,
       references: { model: Categoria, key: "CATEGORIA_ID" },
     },
-    CUENTA_DESTINO_ID: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      comment: "FK lógica hacia PAG_CUENTAS_BANCARIAS",
-    },
-    CODIGO: { type: DataTypes.STRING(20), allowNull: false },
+    CUENTA_DESTINO_ID: { type: DataTypes.INTEGER, allowNull: false },
+    CODIGO: { type: DataTypes.STRING(30), allowNull: false },
     NOMBRE: { type: DataTypes.STRING(100), allowNull: false },
-    MONTO_BASE: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
-    TIPO_COBRO: {
-      type: DataTypes.STRING(30),
+    MONTO_BASE: { type: DataTypes.INTEGER, allowNull: false },
+    TIPO_COBRO: { type: DataTypes.STRING(20), allowNull: false, defaultValue: "MENSUAL" },
+    ACTIVO: {
+      type: DataTypes.CHAR(1),
       allowNull: false,
-      comment: "Ej: MENSUAL, ANUAL, BONO, EXTRAORDINARIO",
+      defaultValue: "S",
+      validate: { isIn: [["S", "N"]] },
     },
-    ACTIVO: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     FECHA_CREACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     FECHA_ACTUALIZACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     FECHA_BAJA: { type: DataTypes.DATE, allowNull: true, defaultValue: null },

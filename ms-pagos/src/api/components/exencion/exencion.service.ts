@@ -37,11 +37,9 @@ export const exencionService = {
   },
 
   /**
-   * Flujo de aprobación:
-   * 1. El profesor jefe revisa y aprueba o rechaza.
-   * 2. El tesorero de apoderados revisa y aprueba o rechaza.
-   * 3. Solo si AMBOS aprueban, el estado final es APROBADA y el cobro se marca como EXENTO.
-   * Si cualquiera rechaza, el estado final es RECHAZADA.
+   * El profesor registra su revisión marcando CHECK_PROFESOR = 'S' o 'N'.
+   * El trigger trg_aplicar_exencion en Oracle actualiza ESTADO_FINAL automáticamente
+   * cuando ambos checks son 'S'. No necesitamos hacerlo manualmente.
    */
   revisarComoProfesor: async (
     exencionId: number,
@@ -52,15 +50,15 @@ export const exencionService = {
     const exencion = await exencionService.obtenerExencion(exencionId, colegioId);
     if (exencion.ESTADO_FINAL !== "PENDIENTE")
       throw new ApiError(409, "Esta solicitud ya fue resuelta");
-    if (exencion.CHECK_PROFESOR !== null)
+    if (exencion.CHECK_PROFESOR === "S")
       throw new ApiError(409, "El profesor ya revisó esta solicitud");
 
-    await exencionRepository.registrarRevisionProfesor(exencionId, colegioId, aprobado, userId);
-
-    if (!aprobado) {
-      await exencionRepository.actualizarEstadoFinal(exencionId, colegioId, "RECHAZADA");
-    }
-
+    await exencionRepository.registrarRevisionProfesor(
+      exencionId,
+      colegioId,
+      aprobado ? "S" : "N",
+      userId,
+    );
     return exencionService.obtenerExencion(exencionId, colegioId);
   },
 
@@ -74,27 +72,27 @@ export const exencionService = {
     const exencion = await exencionService.obtenerExencion(exencionId, colegioId);
     if (exencion.ESTADO_FINAL !== "PENDIENTE")
       throw new ApiError(409, "Esta solicitud ya fue resuelta");
-    if (exencion.CHECK_PROFESOR === null)
-      throw new ApiError(409, "El profesor aún no ha revisado esta solicitud");
-    if (exencion.CHECK_PROFESOR === false)
-      throw new ApiError(409, "Esta solicitud ya fue rechazada por el profesor");
-    if (exencion.CHECK_TESORERO !== null)
+    if (exencion.CHECK_PROFESOR !== "S")
+      throw new ApiError(409, "El profesor aún no ha aprobado esta solicitud");
+    if (exencion.CHECK_TESORERO === "S")
       throw new ApiError(409, "El tesorero ya revisó esta solicitud");
 
     await exencionRepository.registrarRevisionTesorero(
       exencionId,
       colegioId,
-      aprobado,
+      aprobado ? "S" : "N",
       userId,
       observacion,
     );
 
-    if (aprobado) {
-      await exencionRepository.actualizarEstadoFinal(exencionId, colegioId, "APROBADA");
-      await cuentaCobrarRepository.updateEstado(exencion.COBRO_ID, colegioId, "EXENTO");
-    } else {
-      await exencionRepository.actualizarEstadoFinal(exencionId, colegioId, "RECHAZADA");
+    // Si el tesorero rechaza, actualizamos ESTADO_FINAL manualmente
+    // (el trigger solo actúa cuando ambos son 'S')
+    if (!aprobado) {
+      await exencionRepository.actualizarEstadoFinal(exencionId, colegioId, "RECHAZADO");
     }
+
+    // Si aprobó, el trigger Oracle actualiza ESTADO_FINAL a 'APROBADO' automáticamente
+    // y marcará el cobro como EXENTO. No necesitamos hacerlo aquí.
 
     return exencionService.obtenerExencion(exencionId, colegioId);
   },

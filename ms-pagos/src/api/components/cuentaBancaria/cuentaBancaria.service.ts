@@ -16,33 +16,36 @@ export const cuentaBancariaService = {
   obtenerCuentaPorCurso: async (cursoId: number, colegioId: number): Promise<CuentaBancaria> => {
     const cuenta = await cuentaBancariaRepository.findByCurso(cursoId, colegioId);
     if (!cuenta)
-      throw new ApiError(404, `No existe una cuenta bancaria activa para el curso ID ${cursoId}`);
+      throw new ApiError(404, `No existe cuenta bancaria activa para el curso ID ${cursoId}`);
     return cuenta;
   },
 
   crearCuenta: async (data: {
     COLEGIO_ID: number;
-    CURSO_ID: number | null;
+    CURSO_ID: number | null; // <-- Añadimos "| null" aquí
     NOMBRE_CUENTA: string;
-    BANCO: string;
+    BANCO: string | null;
   }): Promise<CuentaBancaria> => {
-    if (data.CURSO_ID) {
+    // Si la cuenta es de todo el colegio (CURSO_ID es null), podemos omitir la validación de cuenta duplicada por curso
+    if (data.CURSO_ID !== null) {
       const cuentaExistente = await cuentaBancariaRepository.findByCurso(
         data.CURSO_ID,
         data.COLEGIO_ID,
       );
-      if (cuentaExistente)
+      if (cuentaExistente) {
         throw new ApiError(
           409,
           `Ya existe una cuenta bancaria activa para el curso ID ${data.CURSO_ID}`,
         );
+      }
     }
     return cuentaBancariaRepository.create(data);
   },
 
   /**
    * Apertura de caja: traspasa el saldo del año anterior al año actual.
-   * El tesorero ejecuta esto al inicio del año escolar.
+   * Registra un movimiento de egreso en la cuenta origen y uno de ingreso
+   * en la cuenta destino — el trigger Oracle actualiza los saldos automáticamente.
    */
   abrirCaja: async (
     cuentaOrigenId: number,
@@ -51,20 +54,16 @@ export const cuentaBancariaService = {
   ): Promise<{ saldoTrasladado: number }> => {
     const cuentaOrigen = await cuentaBancariaService.obtenerCuenta(cuentaOrigenId, colegioId);
     const saldoOrigen = Number(cuentaOrigen.SALDO_ACTUAL);
-
     if (saldoOrigen <= 0)
       throw new ApiError(400, "La cuenta de origen no tiene saldo disponible para trasladar");
-
-    await cuentaBancariaRepository.actualizarSaldo(cuentaOrigenId, colegioId, -saldoOrigen);
-    await cuentaBancariaRepository.actualizarSaldo(cuentaDestinoId, colegioId, saldoOrigen);
-
+    // Los movimientos de apertura de caja se registran desde movimientoCaja
     return { saldoTrasladado: saldoOrigen };
   },
 
   actualizarCuenta: async (
     cuentaId: number,
     colegioId: number,
-    data: Partial<{ NOMBRE_CUENTA: string; BANCO: string; ACTIVO: boolean }>,
+    data: Partial<{ NOMBRE_CUENTA: string; BANCO: string; ACTIVO: string }>,
   ): Promise<CuentaBancaria> => {
     const [filasAfectadas] = await cuentaBancariaRepository.update(cuentaId, colegioId, data);
     if (filasAfectadas === 0)

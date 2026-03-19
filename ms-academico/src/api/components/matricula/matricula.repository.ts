@@ -1,41 +1,64 @@
-import { WhereOptions } from "sequelize";
+import { QueryTypes, WhereOptions } from "sequelize";
+import sequelize from "../../../config/database.config";
 import Matricula, { EstadoPromocion, EstadoMatricula } from "../../../models/matricula.model";
 import Curso from "../../../models/curso.model";
 import Nivel from "../../../models/nivel.model";
 import Periodo from "../../../models/periodo.model";
 
 export const matriculaRepository = {
-  findAllByCurso: async (cursoId: number, colegioId: number): Promise<Matricula[]> => {
-    return Matricula.findAll({
-      where: { CURSO_ID: cursoId, COLEGIO_ID: colegioId } as WhereOptions,
-      include: [
-        {
-          model: Curso,
-          as: "curso",
-          include: [
-            { model: Nivel, as: "nivel" },
-            { model: Periodo, as: "periodo" },
-          ],
-        },
-      ],
-      order: [["NUMERO_LISTA", "ASC"]],
+  findAllByCurso: async (cursoId: number, colegioId: number): Promise<any[]> => {
+    const query = `
+      SELECT 
+        m.*,
+        u."NOMBRES" AS "ALUMNO_NOMBRES",
+        u."APELLIDOS" AS "ALUMNO_APELLIDOS",
+        u."RUT_CUERPO" AS "ALUMNO_RUT",
+        u."RUT_DV" AS "ALUMNO_RUT_DV",
+        c."LETRA" AS "CURSO_LETRA",
+        n."NOMBRE" AS "NIVEL_NOMBRE",
+        p."ANIO" AS "PERIODO_ANIO"
+      FROM "MS_ACADEMICO"."ACA_MATRICULAS" m
+      JOIN "MS_IDENTITY"."IDN_USUARIOS" u ON m."ALUMNO_ID" = u."USER_ID"
+      JOIN "MS_ACADEMICO"."ACA_CURSOS" c ON m."CURSO_ID" = c."CURSO_ID"
+      JOIN "MS_ACADEMICO"."ACA_NIVELES" n ON c."NIVEL_ID" = n."NIVEL_ID"
+      JOIN "MS_ACADEMICO"."ACA_PERIODOS" p ON c."PERIODO_ID" = p."PERIODO_ID"
+      WHERE m."CURSO_ID" = :cursoId 
+        AND m."COLEGIO_ID" = :colegioId
+        AND m."FECHA_BAJA" IS NULL
+      ORDER BY m."NUMERO_LISTA" ASC
+    `;
+
+    return sequelize.query(query, {
+      replacements: { cursoId, colegioId },
+      type: QueryTypes.SELECT,
     });
   },
 
-  findAllByAlumno: async (alumnoId: number, colegioId: number): Promise<Matricula[]> => {
-    return Matricula.findAll({
-      where: { ALUMNO_ID: alumnoId, COLEGIO_ID: colegioId } as WhereOptions,
-      include: [
-        {
-          model: Curso,
-          as: "curso",
-          include: [
-            { model: Nivel, as: "nivel" },
-            { model: Periodo, as: "periodo" },
-          ],
-        },
-      ],
-      order: [["ANIO", "DESC"]],
+  findAllByAlumno: async (alumnoId: number, colegioId: number): Promise<any[]> => {
+    const query = `
+      SELECT 
+        m.*,
+        u."NOMBRES" AS "ALUMNO_NOMBRES",
+        u."APELLIDOS" AS "ALUMNO_APELLIDOS",
+        u."RUT_CUERPO" AS "ALUMNO_RUT",
+        u."RUT_DV" AS "ALUMNO_RUT_DV",
+        c."LETRA" AS "CURSO_LETRA",
+        n."NOMBRE" AS "NIVEL_NOMBRE",
+        p."ANIO" AS "PERIODO_ANIO"
+      FROM "MS_ACADEMICO"."ACA_MATRICULAS" m
+      JOIN "MS_IDENTITY"."IDN_USUARIOS" u ON m."ALUMNO_ID" = u."USER_ID"
+      JOIN "MS_ACADEMICO"."ACA_CURSOS" c ON m."CURSO_ID" = c."CURSO_ID"
+      JOIN "MS_ACADEMICO"."ACA_NIVELES" n ON c."NIVEL_ID" = n."NIVEL_ID"
+      JOIN "MS_ACADEMICO"."ACA_PERIODOS" p ON c."PERIODO_ID" = p."PERIODO_ID"
+      WHERE m."ALUMNO_ID" = :alumnoId 
+        AND m."COLEGIO_ID" = :colegioId
+        AND m."FECHA_BAJA" IS NULL
+      ORDER BY m."ANIO" DESC
+    `;
+
+    return sequelize.query(query, {
+      replacements: { alumnoId, colegioId },
+      type: QueryTypes.SELECT,
     });
   },
 
@@ -44,7 +67,7 @@ export const matriculaRepository = {
       where: {
         ALUMNO_ID: alumnoId,
         COLEGIO_ID: colegioId,
-        ESTADO: EstadoMatricula.ACTIVA,
+        ESTADO: EstadoMatricula.REGULAR,
       } as WhereOptions,
       include: [
         {
@@ -91,7 +114,7 @@ export const matriculaRepository = {
       where: {
         CURSO_ID: cursoId,
         COLEGIO_ID: colegioId,
-        ESTADO: EstadoMatricula.ACTIVA,
+        ESTADO: EstadoMatricula.REGULAR,
       } as WhereOptions,
     });
   },
