@@ -213,9 +213,9 @@ export const createUser = async (userData: any) => {
     // 4. Inserción cruda (Raw Query) para evadir los bugs de Sequelize con Oracle
     await sequelize.query(
       `INSERT INTO "IDN_USUARIOS" 
-        ("COLEGIO_ID", "GRUPO_ID", "RUT_CUERPO", "RUT_DV", "NOMBRES", "APELLIDOS", "EMAIL", "PASSWORD_HASH", "ESTADO") 
+        ("COLEGIO_ID", "GRUPO_ID", "RUT_CUERPO", "RUT_DV", "NOMBRES", "APELLIDOS", "EMAIL", "PASSWORD_HASH", "ESTADO", "COMUNA_ID", "DIRECCION_CALLE") 
        VALUES 
-        (:colegioId, :grupoId, :rutCuerpo, :rutDv, :nombres, :apellidos, :email, :passwordHash, 'ACTIVO')`,
+        (:colegioId, :grupoId, :rutCuerpo, :rutDv, :nombres, :apellidos, :email, :passwordHash, 'ACTIVO', :comunaId, :direccionCalle)`,
       {
         replacements: {
           colegioId: userData.colegioId,
@@ -226,6 +226,8 @@ export const createUser = async (userData: any) => {
           apellidos: userData.apellidos,
           email: userData.email,
           passwordHash: hashedPassword,
+          comunaId: userData.comunaId,
+          direccionCalle: userData.direccionCalle,
         },
         transaction: t, // <- ¡Mantenemos la transacción segura!
       },
@@ -264,12 +266,14 @@ export const createUser = async (userData: any) => {
 
     // 7. Retornamos los datos limpios (sin el hash por seguridad)
     return {
-      user_id: newUser.userId, // Ya no dirá que posiblemente es null
+      user_id: newUser.userId,
       nombres: newUser.nombres,
       apellidos: newUser.apellidos,
       email: newUser.email,
       rol_code: userData.rolCode,
       estado: newUser.estado,
+      comuna_id: newUser.comunaId, // <- Agregado
+      direccion_calle: newUser.direccionCalle, // <- Agregado
     };
   } catch (error) {
     // Si algo falla, revertimos cualquier inserción a medias

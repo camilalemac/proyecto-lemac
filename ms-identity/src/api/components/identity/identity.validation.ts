@@ -30,4 +30,10 @@ export const validateFindByRut = [
     .trim()
     .isLength({ min: 1, max: 1 })
     .withMessage("El dígito verificador debe ser 1 caracter"),
+  body("comunaId")
+    .notEmpty()
+    .withMessage("La comuna es obligatoria")
+    .isInt()
+    .withMessage("El ID de comuna debe ser un número entero"),
+  body("direccionCalle").notEmpty().withMessage("La dirección es obligatoria").trim(),
 ];

@@ -27,6 +27,8 @@ export class Identity extends Model<InferAttributes<Identity>, InferCreationAttr
   declare esSistema?: boolean;
   declare estado?: string;
   declare role?: IdentityRole;
+  declare comunaId?: number | null;
+  declare direccionCalle?: string | null;
   declare fechaCreacion?: Date;
   declare fechaActualizacion?: Date;
   declare fechaBaja?: Date | null;
@@ -93,6 +95,16 @@ Identity.init(
       allowNull: false,
       defaultValue: "activo",
       field: "ESTADO",
+    },
+    comunaId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: "COMUNA_ID",
+    },
+    direccionCalle: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "DIRECCION_CALLE",
     },
     fechaCreacion: {
       type: DataTypes.DATE,

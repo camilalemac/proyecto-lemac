@@ -7,7 +7,7 @@ export const cursoRepository = {
     let query = `
       SELECT 
         c.*,
-        n."NOMBRE_LARGO" AS "NIVEL_NOMBRE_LARGO",
+        n."NOMBRE" AS "NIVEL_NOMBRE_LARGO",
         n."NOMBRE_CORTO" AS "NIVEL_NOMBRE_CORTO",
         n."GRADO_MINEDUC" AS "NIVEL_GRADO_MINEDUC",
         p."ANIO" AS "PERIODO_ANIO",
@@ -71,7 +71,7 @@ export const cursoRepository = {
     const query = `
       SELECT 
         c.*,
-        n."NOMBRE_LARGO" AS "NIVEL_NOMBRE_LARGO",
+        n."NOMBRE" AS "NIVEL_NOMBRE_LARGO",
         n."NOMBRE_CORTO" AS "NIVEL_NOMBRE_CORTO",
         n."GRADO_MINEDUC" AS "NIVEL_GRADO_MINEDUC",
         p."ANIO" AS "PERIODO_ANIO",
