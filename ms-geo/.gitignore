@@ -1,0 +1,30 @@
+# Dependencias
+node_modules/
+
+# Compilados de TypeScript
+dist/
+build/
+
+# Entorno y Secretos (ISO 27001 - A.10 Criptografía)
+.env
+.env.*
+!.env.example
+
+# =======================================================
+# ALMACÉN DE CREDENCIALES (WALLET) - ESTRICTAMENTE BLOQUEADO
+# =======================================================
+wallet/
+*.sso
+*.p12
+*.pem
+*.key
+*.jks
+
+# Logs y Diagnóstico
+logs/
+*.log
+npm-debug.log*
+
+# Configuración de IDE y OS
+.vscode/
+.DS_Store
