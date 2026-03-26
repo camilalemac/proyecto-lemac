@@ -9,27 +9,51 @@ export async function POST(request: Request) {
 
     const response = await fetch(microservicioUrl, {
       method: 'POST',
-      headers: {
+      headers: { 
         'Content-Type': 'application/json',
+        // Si el microservicio requiere un User-Agent (vimos que el controller lo pide)
+        'User-Agent': 'NextJS-Frontend' 
       },
       body: JSON.stringify(data),
     });
 
-    const result = await response.json();
+    const contentType = response.headers.get("content-type");
 
-    if (!response.ok) {
+    if (contentType && contentType.includes("application/json")) {
+      const result = await response.json();
+
+      if (!response.ok) {
+        // DIAGNÓSTICO PARA EL ERROR 400:
+        // Imprimimos el error exacto que manda el microservicio (ej: "email is required")
+        console.error("Detalle del error desde ms-auth:", result);
+
+        return NextResponse.json(
+          { 
+            error: result.message || "Datos de registro inválidos", 
+            details: result.errors || result.data || "Revisa los campos obligatorios" 
+          }, 
+          { status: response.status }
+        );
+      }
+
+      return NextResponse.json({ 
+        message: "¡Usuario creado con éxito en Oracle!", 
+        data: result 
+      }, { status: 201 });
+
+    } else {
+      const errorText = await response.text();
+      console.error("Respuesta inesperada (No es JSON):", errorText);
       return NextResponse.json(
-        { error: result.message || "Error al registrar en la base de datos" }, 
-        { status: response.status }
+        { error: "El servidor de autenticación respondió en un formato incorrecto." }, 
+        { status: 502 }
       );
     }
 
-    return NextResponse.json({ message: "Registro exitoso", data: result }, { status: 201 });
-
-  } catch (error) {
-    console.error("Error en el puente API:", error);
+  } catch (error: any) {
+    console.error("Error crítico de conexión:", error.message);
     return NextResponse.json(
-      { error: "No se pudo conectar con el servidor de base de datos" }, 
+      { error: "No se pudo conectar con ms-auth. Asegúrate de que el puerto 3001 esté activo." }, 
       { status: 500 }
     );
   }
