@@ -1,9 +1,11 @@
+// Agrega todos los códigos que necesites usar en tus rutas
 export type UserRole =
-  | "alumno"
-  | "apoderado"
-  | "profesor"
-  | "tesorero"
   | "secretario"
-  | "presidente"
+  | "administrador"
+  | "apoderado"
+  | "DIR_SEC_APO"
+  | "SYS_ADMIN"
+  | "STF_ADMIN"
+  | "tesorero"
   | "directora"
-  | "administrador";
+  | "presidente";

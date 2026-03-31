@@ -1,5 +1,5 @@
 import { generarPDFActa, DatoActa } from "../../../utils/pdf.util";
-import { subirPDF } from "../../../utils/cloudinary.util";
+import { subirPDFADrive } from "../../../utils/googleDrive.util";
 import { Documento } from "../../../models/documento.model";
 import { ApiError } from "../../../utils/ApiError";
 import { logger } from "../../../utils/logger";
@@ -33,7 +33,7 @@ export const actaService = {
 
     const pdfBuffer = await generarPDFActa(datosPDF);
     const nombreArchivo = `acta-${data.titulo.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`;
-    const urlActa = await subirPDF(pdfBuffer, nombreArchivo);
+    const urlActa = await subirPDFADrive(pdfBuffer, nombreArchivo); // Cambia el nombre de la función
 
     if (!urlActa) throw new ApiError(502, "Error al subir el acta a la nube");
 

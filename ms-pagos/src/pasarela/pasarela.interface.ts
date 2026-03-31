@@ -1,13 +1,15 @@
 export interface IniciarPagoParams {
   monto: number;
   descripcion: string;
-  transaccionId: number;
   returnUrl: string;
+  // NUEVO: Necesitamos saber qué se está pagando para enviarlo en la metadata
+  cobrosIds: number[];
+  colegioId: number;
 }
 
 export interface IniciarPagoResult {
   urlPago: string;
-  tokenPasarela: string;
+  tokenPasarela: string; // En MercadoPago, este será el preferenceId
 }
 
 export interface ConfirmarPagoParams {

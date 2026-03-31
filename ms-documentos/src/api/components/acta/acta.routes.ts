@@ -10,7 +10,7 @@ const router = Router();
 router.get(
   "/",
   checkJwt,
-  checkPermissions(["secretario", "tesorero", "presidente", "directora", "administrador"]),
+  checkPermissions(["secretario", "administrador", "DIR_SEC_APO"]),
   validateListarActas,
   runValidation,
   actaController.listarActas,
@@ -18,7 +18,7 @@ router.get(
 router.post(
   "/generar",
   checkJwt,
-  checkPermissions(["secretario", "administrador"]),
+  checkPermissions(["secretario", "administrador", "DIR_SEC_APO"]),
   validateGenerarActa,
   runValidation,
   actaController.generarActa,

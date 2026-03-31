@@ -3,29 +3,24 @@ import sequelize from "../../../config/database.config";
 import { transaccionRepository } from "./transaccion.repository";
 import { cuentaCobrarRepository } from "../cuentaCobrar/cuentaCobrar.repository";
 import { metodoPagoService } from "../metodoPago/metodoPago.service";
-import { WebpayAdapter } from "../../../pasarela/webpay.adapter";
-import { KhipuAdapter } from "../../../pasarela/khipu.adapter";
-import { TransferenciaAdapter } from "../../../pasarela/transferencia.adapter";
 import { IPasarelaPago } from "../../../pasarela/pasarela.interface";
 import { ApiError } from "../../../utils/ApiError";
 import { logger } from "../../../utils/logger";
 import CuentaCobrarModel from "../../../models/cuentaCobrar.model";
 
-const METODO_WEBPAY = "WEBPAY";
-const METODO_KHIPU = "KHIPU";
-const METODO_TRANSFERENCIA = "TRANSFERENCIA";
+// ÚNICA PASARELA DIGITAL: MercadoPago
+import { MercadoPagoAdapter } from "../../../pasarela/mercadopago.adapter";
+
+const METODO_MERCADOPAGO = "MERCADOPAGO";
 
 const obtenerAdaptadorPasarela = (metodoPago: string): IPasarelaPago => {
-  switch (metodoPago.toUpperCase()) {
-    case METODO_WEBPAY:
-      return new WebpayAdapter();
-    case METODO_KHIPU:
-      return new KhipuAdapter();
-    case METODO_TRANSFERENCIA:
-      return new TransferenciaAdapter();
-    default:
-      throw new ApiError(400, `Método de pago "${metodoPago}" no soportado`);
+  if (metodoPago.toUpperCase() === METODO_MERCADOPAGO) {
+    return new MercadoPagoAdapter();
   }
+  throw new ApiError(
+    400,
+    `Método de pago "${metodoPago}" no soportado. Actualmente solo utilizamos MercadoPago.`,
+  );
 };
 
 /**
@@ -50,12 +45,15 @@ const procesarCobrosPagados = async (
     );
 
     // Registrar evidencia inmutable en tabla Blockchain — un INSERT por cobro
-    await transaccionRepository.registrar({
-      COLEGIO_ID: colegioId,
-      COBRO_ID: cobroId,
-      MONTO_PAGO: montoPorCobro,
-      METODO_PAGO: metodoPago,
-    });
+    await transaccionRepository.registrar(
+      {
+        COLEGIO_ID: colegioId,
+        COBRO_ID: cobroId,
+        MONTO_PAGO: montoPorCobro,
+        METODO_PAGO: metodoPago,
+      },
+      t,
+    );
   }
 };
 
@@ -67,9 +65,7 @@ export interface ResultadoInicioPago {
 
 export const transaccionService = {
   /**
-   * Inicia el proceso de pago.
-   * Retorna la URL de redirección al banco y el token para confirmar después.
-   * El token se retorna al frontend para que lo guarde temporalmente.
+   * Inicia el proceso de pago con MercadoPago.
    */
   iniciarPago: async (data: {
     colegioId: number;
@@ -89,6 +85,7 @@ export const transaccionService = {
       (acc, c) => acc + (Number(c.MONTO_ORIGINAL) - Number(c.DESCUENTO)),
       0,
     );
+
     const cotizacion = await metodoPagoService.cotizarPago(
       montoOriginal,
       data.metodoId,
@@ -96,64 +93,60 @@ export const transaccionService = {
     );
 
     const pasarela = obtenerAdaptadorPasarela(data.metodoPagoNombre);
-    const returnUrl = `${process.env.WEBPAY_RETURN_URL || "http://localhost:3005/api/v1/pagos/transacciones"}/retorno`;
+
+    // Usamos una URL de retorno general para tu Frontend
+    const returnUrl = process.env.FRONTEND_RETURN_URL || "http://localhost:5173/pago-exitoso";
 
     const resultado = await pasarela.iniciarPago({
       monto: cotizacion.montoTotal,
       descripcion: `Pago de ${cobrosPendientes.length} cuota(s)`,
-      transaccionId: Date.now(),
       returnUrl,
+      cobrosIds: data.cobrosIds,
+      colegioId: data.colegioId,
     });
 
-    logger.info("[ms-pagos] Pago iniciado", {
+    logger.info("[ms-pagos] Pago iniciado en MercadoPago", {
       monto: cotizacion.montoTotal,
-      metodo: data.metodoPagoNombre,
       cobros: data.cobrosIds,
     });
 
     return {
       urlPago: resultado.urlPago,
-      token: resultado.tokenPasarela,
+      token: resultado.tokenPasarela, // Es el PreferenceID de MercadoPago
       cotizacion,
     };
   },
 
   /**
-   * Confirma el pago retornado por la pasarela.
-   * cobrosIds y colegioId vienen del frontend junto al token de retorno.
+   * Con MercadoPago, la confirmación real la hace el Webhook.
+   * Bloqueamos este método para evitar que el frontend intente confirmar pagos digitales.
    */
-  confirmarPago: async (data: {
+  confirmarPago: async (_data: {
     token: string;
     cobrosIds: number[];
     colegioId: number;
     metodoPago: string;
   }): Promise<{ aprobado: boolean; mensaje: string }> => {
-    const pasarela = obtenerAdaptadorPasarela(data.metodoPago);
-    const resultado = await pasarela.confirmarPago({ tokenPasarela: data.token });
-
-    if (resultado.aprobado) {
-      await sequelize.transaction(async (t: Transaction) => {
-        await procesarCobrosPagados(data.cobrosIds, data.colegioId, data.metodoPago, t);
-      });
-    }
-
-    logger.info("[ms-pagos] Pago confirmado", {
-      aprobado: resultado.aprobado,
-      cobros: data.cobrosIds,
-    });
-    return { aprobado: resultado.aprobado, mensaje: resultado.mensaje };
+    throw new ApiError(
+      400,
+      "La confirmación de pagos de MercadoPago se procesa automáticamente vía Webhook. No se debe llamar a este método.",
+    );
   },
 
   /**
-   * Confirmación manual de transferencia bancaria — ejecutada por el tesorero.
+   * Confirmación manual (Efectivo / Transferencia Bancaria directa) — ejecutada por el tesorero.
    */
-  confirmarTransferenciaManual: async (data: {
+  confirmarPagoManual: async (data: {
     cobrosIds: number[];
     colegioId: number;
+    metodo: string;
   }): Promise<void> => {
     await sequelize.transaction(async (t: Transaction) => {
-      await procesarCobrosPagados(data.cobrosIds, data.colegioId, METODO_TRANSFERENCIA, t);
+      await procesarCobrosPagados(data.cobrosIds, data.colegioId, data.metodo, t);
     });
-    logger.info("[ms-pagos] Transferencia manual confirmada", { cobros: data.cobrosIds });
+    logger.info("[ms-pagos] Pago manual confirmado por tesorería", {
+      cobros: data.cobrosIds,
+      metodo: data.metodo,
+    });
   },
 };

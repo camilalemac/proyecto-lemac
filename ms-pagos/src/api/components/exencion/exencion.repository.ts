@@ -1,4 +1,4 @@
-import { WhereOptions } from "sequelize";
+import { WhereOptions, Transaction } from "sequelize";
 import Exencion from "../../../models/exencion.model";
 import CuentaCobrar from "../../../models/cuentaCobrar.model";
 
@@ -45,10 +45,11 @@ export const exencionRepository = {
     colegioId: number,
     check: string,
     userId: number,
+    transaction?: Transaction, // <-- Nuevo parámetro
   ): Promise<[number]> => {
     return Exencion.update(
       { CHECK_PROFESOR: check, FECHA_PROFESOR: new Date(), USER_PROFESOR: userId },
-      { where: { EXENCION_ID: exencionId, COLEGIO_ID: colegioId } as WhereOptions },
+      { where: { EXENCION_ID: exencionId, COLEGIO_ID: colegioId } as WhereOptions, transaction },
     );
   },
 
@@ -58,6 +59,7 @@ export const exencionRepository = {
     check: string,
     userId: number,
     observacion: string | null,
+    transaction?: Transaction, // <-- Nuevo parámetro
   ): Promise<[number]> => {
     return Exencion.update(
       {
@@ -66,7 +68,7 @@ export const exencionRepository = {
         USER_TESORERO: userId,
         OBSERVACION_RECHAZO: observacion,
       },
-      { where: { EXENCION_ID: exencionId, COLEGIO_ID: colegioId } as WhereOptions },
+      { where: { EXENCION_ID: exencionId, COLEGIO_ID: colegioId } as WhereOptions, transaction },
     );
   },
 
@@ -74,10 +76,11 @@ export const exencionRepository = {
     exencionId: number,
     colegioId: number,
     estadoFinal: "APROBADO" | "RECHAZADO",
+    transaction?: Transaction, // <-- Nuevo parámetro
   ): Promise<[number]> => {
     return Exencion.update(
       { ESTADO_FINAL: estadoFinal },
-      { where: { EXENCION_ID: exencionId, COLEGIO_ID: colegioId } as WhereOptions },
+      { where: { EXENCION_ID: exencionId, COLEGIO_ID: colegioId } as WhereOptions, transaction },
     );
   },
 };

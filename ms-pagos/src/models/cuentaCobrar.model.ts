@@ -62,9 +62,9 @@ CuentaCobrar.init(
     DESCRIPCION: { type: DataTypes.STRING(255), allowNull: true, defaultValue: null },
     NUMERO_CUOTA: { type: DataTypes.INTEGER, allowNull: false },
     TOTAL_CUOTAS: { type: DataTypes.INTEGER, allowNull: false },
-    MONTO_ORIGINAL: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
-    DESCUENTO: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
-    MONTO_PAGADO: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+    MONTO_ORIGINAL: { type: DataTypes.INTEGER, allowNull: false },
+    DESCUENTO: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    MONTO_PAGADO: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     FECHA_VENCIMIENTO: { type: DataTypes.DATEONLY, allowNull: false },
     ESTADO: {
       type: DataTypes.STRING(20),

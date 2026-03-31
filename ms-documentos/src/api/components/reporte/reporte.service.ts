@@ -1,5 +1,5 @@
 import { generarPDFReporte, DatoReporte } from "../../../utils/pdf.util";
-import { subirPDF } from "../../../utils/cloudinary.util";
+import { subirPDFADrive } from "../../../utils/googleDrive.util";
 import DocumentoModel, { TipoDocumento, Documento } from "../../../models/documento.model";
 import { ApiError } from "../../../utils/ApiError";
 import { logger } from "../../../utils/logger";
@@ -56,7 +56,7 @@ export const reporteService = {
 
     const pdfBuffer = await generarPDFReporte(datosPDF);
     const nombreArchivo = `reporte-${data.tipoPeriodo}-${data.curso ?? "general"}-${Date.now()}`;
-    const urlReporte = await subirPDF(pdfBuffer, nombreArchivo);
+    const urlReporte = await subirPDFADrive(pdfBuffer, nombreArchivo);
 
     if (!urlReporte) throw new ApiError(502, "Error al subir el reporte a la nube");
 

@@ -1,4 +1,4 @@
-import { WhereOptions, Op, QueryTypes } from "sequelize"; // <-- Agregamos QueryTypes
+import { WhereOptions, Op, QueryTypes, Transaction } from "sequelize"; // <-- Agregamos QueryTypes
 import sequelize from "../../../config/database.config"; // <-- Agregamos tu conexión
 import CuentaCobrar, { EstadoCobro } from "../../../models/cuentaCobrar.model";
 import Concepto from "../../../models/concepto.model";
@@ -114,9 +114,34 @@ export const cuentaCobrarRepository = {
     });
   },
 
+  /**
+   * Actualiza el estado de múltiples cobros a 'PAGADO'.
+   * Se utiliza principalmente al recibir la confirmación de la pasarela de pagos.
+   */
+  marcarComoPagados: async (
+    cobrosIds: number[],
+    colegioId: number,
+    transaction?: Transaction,
+  ): Promise<[number]> => {
+    return CuentaCobrar.update(
+      {
+        ESTADO: "PAGADO",
+        // Actualizamos el MONTO_PAGADO usando Sequelize literal para que tome el valor de la misma fila
+        MONTO_PAGADO: sequelize.literal('"MONTO_ORIGINAL" - "DESCUENTO"'),
+      },
+      {
+        where: {
+          COBRO_ID: { [Op.in]: cobrosIds },
+          COLEGIO_ID: colegioId,
+        } as WhereOptions,
+        transaction,
+      },
+    );
+  },
+
   // ✅ NUEVO: Función para insertar muchas cuotas de golpe en la base de datos
   // ✅ NUEVO: Función para insertar muchas cuotas de golpe en la base de datos
-  bulkCreate: async (cobros: any[]): Promise<void> => {
-    await CuentaCobrar.bulkCreate(cobros as any); // <-- Agregamos el "as any" aquí adentro
+  bulkCreate: async (cobros: any[], transaction?: Transaction): Promise<void> => {
+    await CuentaCobrar.bulkCreate(cobros as any, { transaction });
   },
 };

@@ -1,18 +1,30 @@
-import { WhereOptions } from "sequelize";
+import { WhereOptions, Transaction } from "sequelize";
 import Transaccion from "../../../models/transaccion.model";
 
 export const transaccionRepository = {
-  /**
-   * Registra un pago como evidencia inmutable en la tabla Blockchain.
-   * Solo INSERT — nunca UPDATE ni DELETE.
-   */
-  registrar: async (data: {
-    COLEGIO_ID: number;
-    COBRO_ID: number;
-    MONTO_PAGO: number;
-    METODO_PAGO: string;
-  }): Promise<Transaccion> => {
-    return Transaccion.create(data);
+  registrar: async (
+    data: {
+      COLEGIO_ID: number;
+      COBRO_ID: number;
+      MONTO_PAGO: number;
+      METODO_PAGO: string;
+    },
+    transaction?: Transaction,
+  ): Promise<Transaccion> => {
+    return Transaccion.create(data, { transaction });
+  },
+
+  // NUEVO: Para insertar múltiples evidencias inmutables en un solo pago
+  registrarMultiples: async (
+    data: {
+      COLEGIO_ID: number;
+      COBRO_ID: number;
+      MONTO_PAGO: number;
+      METODO_PAGO: string;
+    }[],
+    transaction?: Transaction,
+  ): Promise<Transaccion[]> => {
+    return Transaccion.bulkCreate(data, { transaction });
   },
 
   findByCobro: async (cobroId: number, colegioId: number): Promise<Transaccion | null> => {

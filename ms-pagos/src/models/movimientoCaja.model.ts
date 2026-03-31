@@ -55,7 +55,7 @@ MovimientoCaja.init(
       validate: { isIn: [["INGRESO", "EGRESO"]] },
     },
     GLOSA: { type: DataTypes.STRING(255), allowNull: false },
-    MONTO: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+    MONTO: { type: DataTypes.INTEGER, allowNull: false },
     COMPROBANTE_URL: { type: DataTypes.STRING(500), allowNull: true, defaultValue: null },
     FECHA_MOVIMIENTO: { type: DataTypes.DATE, allowNull: false },
     FECHA_CREACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },

@@ -33,7 +33,7 @@ MetodoPago.init(
       comment: "Ej: Webpay Plus, Khipu, Transferencia Manual",
     },
     COMISION_PORCENTAJE: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
-    COMISION_FIJA: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+    COMISION_FIJA: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     IMPUESTO_PORCENTAJE: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 19.0 },
     ESTADO: { type: DataTypes.STRING(20), allowNull: false, defaultValue: "ACTIVO" },
     FECHA_CREACION: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },

@@ -3,6 +3,7 @@ import { conceptoRepository } from "../concepto/concepto.repository";
 import { metodoPagoService, CotizacionPago } from "../metodoPago/metodoPago.service";
 import { ApiError } from "../../../utils/ApiError";
 import CuentaCobrar from "../../../models/cuentaCobrar.model";
+import sequelize from "../../../config/database.config";
 
 export interface ResumenCobros {
   cobros: CuentaCobrar[];
@@ -72,40 +73,53 @@ export const cuentaCobrarService = {
     NUMERO_CUOTA: number;
     TOTAL_CUOTAS: number;
   }): Promise<{ mensaje: string; cobrosGenerados: number }> => {
-    const concepto = await conceptoRepository.findById(data.CONCEPTO_ID, data.COLEGIO_ID);
-    if (!concepto) {
-      throw new ApiError(404, `Concepto de cobro con ID ${data.CONCEPTO_ID} no encontrado`);
+    // Iniciamos la transacción aquí
+    const t = await sequelize.transaction();
+
+    try {
+      const concepto = await conceptoRepository.findById(data.CONCEPTO_ID, data.COLEGIO_ID);
+      if (!concepto) {
+        throw new ApiError(404, `Concepto de cobro con ID ${data.CONCEPTO_ID} no encontrado`);
+      }
+
+      const alumnos = await cuentaCobrarRepository.obtenerDatosFinancierosAlumnosPorCurso(
+        data.CURSO_ID,
+        data.COLEGIO_ID,
+      );
+
+      if (alumnos.length === 0) {
+        throw new ApiError(400, "No hay alumnos matriculados en este curso.");
+      }
+
+      const nuevosCobros = alumnos.map((alumno) => ({
+        COLEGIO_ID: data.COLEGIO_ID,
+        ALUMNO_ID: alumno.ALUMNO_ID,
+        GRUPO_FAMILIAR_ID: alumno.GRUPO_FAMILIAR_ID,
+        APODERADO_ID: alumno.APODERADO_ID,
+        CONCEPTO_ID: data.CONCEPTO_ID,
+        DESCRIPCION: data.DESCRIPCION,
+        NUMERO_CUOTA: data.NUMERO_CUOTA,
+        TOTAL_CUOTAS: data.TOTAL_CUOTAS,
+        MONTO_ORIGINAL: concepto.getDataValue("MONTO_BASE"),
+        FECHA_VENCIMIENTO: data.FECHA_VENCIMIENTO,
+        ESTADO: "PENDIENTE",
+        MONTO_PAGADO: 0,
+      }));
+
+      // Le pasamos la transacción al bulkCreate
+      await cuentaCobrarRepository.bulkCreate(nuevosCobros, t);
+
+      // Si todo sale bien, guardamos definitivamente
+      await t.commit();
+
+      return {
+        mensaje: "Cobros generados exitosamente",
+        cobrosGenerados: nuevosCobros.length,
+      };
+    } catch (error) {
+      // Si falla cualquier cosa (ej. se cae la BD a la mitad), deshacemos todo
+      await t.rollback();
+      throw error;
     }
-
-    const alumnos = await cuentaCobrarRepository.obtenerDatosFinancierosAlumnosPorCurso(
-      data.CURSO_ID,
-      data.COLEGIO_ID,
-    );
-
-    if (alumnos.length === 0) {
-      throw new ApiError(400, "No hay alumnos matriculados en este curso.");
-    }
-
-    const nuevosCobros = alumnos.map((alumno) => ({
-      COLEGIO_ID: data.COLEGIO_ID,
-      ALUMNO_ID: alumno.ALUMNO_ID,
-      GRUPO_FAMILIAR_ID: alumno.GRUPO_FAMILIAR_ID,
-      APODERADO_ID: alumno.APODERADO_ID,
-      CONCEPTO_ID: data.CONCEPTO_ID,
-      DESCRIPCION: data.DESCRIPCION,
-      NUMERO_CUOTA: data.NUMERO_CUOTA,
-      TOTAL_CUOTAS: data.TOTAL_CUOTAS,
-      MONTO_ORIGINAL: concepto.getDataValue("MONTO_BASE"),
-      FECHA_VENCIMIENTO: data.FECHA_VENCIMIENTO,
-      ESTADO: "PENDIENTE",
-      MONTO_PAGADO: 0,
-    }));
-
-    await cuentaCobrarRepository.bulkCreate(nuevosCobros);
-
-    return {
-      mensaje: "Cobros generados exitosamente",
-      cobrosGenerados: nuevosCobros.length,
-    };
   },
 };
