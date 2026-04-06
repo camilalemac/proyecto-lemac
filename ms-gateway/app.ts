@@ -14,9 +14,9 @@ app.use(cors());
 const services: { [key: string]: string } = {
   auth: process.env.MS_AUTH_URL || "http://localhost:3001",
   identity: process.env.MS_IDENTITY_URL || "http://localhost:3003",
-  geo: process.env.MS_GEO_URL || "http://localhost:3000",
+  geo: process.env.MS_GEO_URL || "http://localhost:3005",
   academico: process.env.MS_ACADEMICO_URL || "http://localhost:3004",
-  pagos: process.env.MS_PAGOS_URL || "http://localhost:3005",
+  pagos: process.env.MS_PAGOS_URL || "http://localhost:3002",
   documentos: process.env.MS_DOCUMENTOS_URL || "http://localhost:3006",
 };
 

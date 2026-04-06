@@ -1,289 +1,316 @@
 "use client"
 import { useState, useEffect } from "react"
 import { 
-  GraduationCap, User, Mail, Eye, EyeOff, MapPin, CheckCircle2, Circle, BookOpen, Plus, Trash2, Users, Check, X
+  GraduationCap, Eye, EyeOff, Check, X, Plus, AlertCircle, CheckCircle2 
 } from "lucide-react"
-
-interface GeoItem { 
-  regionId?: number; 
-  provinciaId?: number; 
-  comunaId?: number; 
-  id?: string | number; 
-  nombre: string 
-}
 
 export default function RegistroPage() {
   const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [hijos, setHijos] = useState<string[]>([""]) 
   const [loading, setLoading] = useState(false)
-  const [rutError, setRutError] = useState("")
+  
+  const GATEWAY_URL = "http://127.0.0.1:3007/api/v1"; 
 
   const [formData, setFormData] = useState({
-    rut: "", nombre: "", email: "", password: "", confirmPassword: "",
-    rol: "", region: "", provincia: "", comuna: "", 
-    curso: "", letra: "", 
-    colegioId: 1 
+    rut: "", nombre: "", email: "", password: "", confirmarPassword: "",
+    rol: "", region: "", provincia: "", comuna: "", colegioId: 1 
   })
 
-  const [regiones, setRegiones] = useState<GeoItem[]>([])
-  const [provincias, setProvincias] = useState<GeoItem[]>([])
-  const [comunas, setComunas] = useState<GeoItem[]>([])
-  const [cursos, setCursos] = useState<any[]>([])
+  const [rutValido, setRutValido] = useState<boolean | null>(null)
+  const [hijos, setHijos] = useState<{rut: string, valido: boolean | null}[]>([{rut: "", valido: null}])
+  const [regiones, setRegiones] = useState([])
+  const [provincias, setProvincias] = useState([])
+  const [comunas, setComunas] = useState([])
 
-  const rolesCategorizados = {
-    "Personal Institucional": ["Administrador", "Directora", "Unidad Tecnico Pedagogica", "Tesorero Colegio", "Profesor"],
-    "Estudiantes": ["Alumno Regular", "Presidente de Centro de Alumnos", "Tesorero Centro Alumnos", "Secretario de Centro de Alumnos", "Presidente Curso Alumnos", "Tesorero de Curso Alumnos", "Secretario de Curso Alumnos"],
-    "Apoderados": ["Apoderado Titular", "Presidente Centro Padres", "Tesorero Centro Padres", "Secretario Centro de Apoderados", "Presidente Curso Apoderados", "Tesorero de Curso Apoderados", "Secretario de Curso Apoderados"]
-  }
-
-  const esEstudiante = rolesCategorizados["Estudiantes"].includes(formData.rol)
-  const esApoderado = rolesCategorizados["Apoderados"].includes(formData.rol)
-
-  // URLs de Microservicios
-  const GEO_API_URL = "http://localhost:8081/api/v1/geo";
-  const ACADEMICO_API_URL = "http://localhost:3004/api/v1/academico";
-  const IDENTITY_API_URL = "http://localhost:3003/api/v1/identity";
-  const AUTH_API_URL = "http://localhost:3001/api/v1/auth"; // Reincorporado
-
-  // --- Formateo de RUT Automático ---
   const formatRut = (value: string) => {
-    let newDoc = value.replace(/[^\dkK]/g, "");
-    if (newDoc.length > 9) newDoc = newDoc.slice(0, 9); // Límite de 9 dígitos (cuerpo + DV)
-    
-    if (newDoc.length <= 1) return newDoc;
-    let result = newDoc.slice(-1);
-    let cuerpo = newDoc.slice(0, -1);
-    if (cuerpo.length > 0) result = "-" + result;
-    if (cuerpo.length > 3) result = "." + cuerpo.slice(-3) + result;
-    if (cuerpo.length > 6) result = "." + cuerpo.slice(-6, -3) + result;
-    if (cuerpo.length > 6) result = cuerpo.slice(0, -6) + result;
-    else if (cuerpo.length > 3) result = cuerpo.slice(0, -3) + result;
-    else result = cuerpo + result;
-    return result;
+    let clean = value.replace(/[^0-9kK]/g, '').toUpperCase().slice(0, 9); 
+    if (clean.length === 0) return "";
+    if (clean.length <= 1) return clean;
+    let body = clean.slice(0, -1);
+    let dv = clean.slice(-1);
+    body = body.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return `${body}-${dv}`;
   };
 
-  // --- Validación de Contraseña ---
+  const isValidRut = (rutFormateado: string) => {
+    let clean = rutFormateado.replace(/[^0-9kK]/g, '').toUpperCase();
+    if (clean.length < 8) return false;
+    let body = clean.slice(0, -1);
+    let dv = clean.slice(-1);
+    let sum = 0;
+    let multiplier = 2;
+    for (let i = body.length - 1; i >= 0; i--) {
+      sum += parseInt(body[i]) * multiplier;
+      multiplier = multiplier === 7 ? 2 : multiplier + 1;
+    }
+    let expectedDv = 11 - (sum % 11);
+    let finalDv = expectedDv === 11 ? '0' : expectedDv === 10 ? 'K' : expectedDv.toString();
+    return finalDv === dv;
+  };
+
+  const handleRutChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatRut(e.target.value);
+    setFormData({...formData, rut: formatted});
+    if (formatted.length > 8) {
+      setRutValido(isValidRut(formatted));
+    } else {
+      setRutValido(null);
+    }
+  };
+
+  const handleHijoChange = (index: number, val: string) => {
+    const formatted = formatRut(val);
+    const newHijos = [...hijos];
+    newHijos[index] = { 
+      rut: formatted, 
+      valido: formatted.length > 8 ? isValidRut(formatted) : null 
+    };
+    setHijos(newHijos);
+  };
+
+  const addHijo = () => setHijos([...hijos, {rut: "", valido: null}]);
+
   const passwordValidations = {
     length: formData.password.length >= 8,
-    number: /\d/.test(formData.password),
     upper: /[A-Z]/.test(formData.password),
+    number: /\d/.test(formData.password),
     special: /[!@#$%^&*(),.?":{}|<>]/.test(formData.password)
   }
+  const esPasswordValida = Object.values(passwordValidations).every(Boolean);
+  const contraseñasCoinciden = formData.password === formData.confirmarPassword && formData.password !== "";
 
-  // --- Lógica de Carga de Datos ---
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [resGeo, resCur] = await Promise.all([
-          fetch(`${GEO_API_URL}/regiones`),
-          fetch(`${ACADEMICO_API_URL}/cursos`)
-        ]);
-        const jsonGeo = await resGeo.json();
-        const jsonCur = await resCur.json();
-        setRegiones(jsonGeo.data || jsonGeo);
-        if (jsonCur.success) setCursos(jsonCur.data);
-      } catch (err) { console.error("Error cargando datos iniciales:", err); }
-    }
-    fetchData();
+    fetch(`${GATEWAY_URL}/geo/regiones`)
+      .then(res => res.json())
+      .then(j => {
+        const dataArray = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : (Array.isArray(j?.data?.data) ? j.data.data : []));
+        setRegiones(dataArray);
+      })
+      .catch(e => console.error("Error en regiones:", e));
   }, [])
 
   useEffect(() => {
-    if (!formData.region) return;
-    fetch(`${GEO_API_URL}/provincias/${formData.region}`).then(res => res.json()).then(json => setProvincias(json.data || json));
+    if (formData.region) {
+      fetch(`${GATEWAY_URL}/geo/provincias/${formData.region}`)
+        .then(res => res.json())
+        .then(j => {
+          const dataArray = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : (Array.isArray(j?.data?.data) ? j.data.data : []));
+          setProvincias(dataArray);
+        });
+    }
   }, [formData.region])
 
   useEffect(() => {
-    if (!formData.provincia) return;
-    fetch(`${GEO_API_URL}/comunas/${formData.provincia}`).then(res => res.json()).then(json => setComunas(json.data || json));
-  }, [formData.provincia])
-
-  // --- Handlers ---
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    if (name === "rut") {
-      setFormData({ ...formData, rut: formatRut(value) });
-    } else {
-      setFormData({ ...formData, [name]: value })
+    if (formData.provincia) {
+      fetch(`${GATEWAY_URL}/geo/comunas/${formData.provincia}`)
+        .then(res => res.json())
+        .then(j => {
+          const dataArray = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : (Array.isArray(j?.data?.data) ? j.data.data : []));
+          setComunas(dataArray);
+        });
     }
-  }
-
-  const handleHijoChange = (index: number, value: string) => {
-    const newHijos = [...hijos];
-    newHijos[index] = formatRut(value); // También formatea el RUT del hijo
-    setHijos(newHijos);
-  }
+  }, [formData.provincia])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading || !Object.values(passwordValidations).every(Boolean)) {
-        alert("Por favor cumple con todos los requisitos de seguridad.");
-        return;
+    if (!esPasswordValida) return alert("Contraseña no cumple requisitos");
+    if (!contraseñasCoinciden) return alert("Las contraseñas no coinciden");
+    if (!rutValido) return alert("Por favor, ingresa un RUT válido");
+    if (!formData.email) return alert("El email es obligatorio");
+
+    const nombreLimpio = formData.nombre.trim();
+    const partesNombre = nombreLimpio.split(/\s+/);
+
+    if (partesNombre.length < 2) {
+      return alert("Debes ingresar nombre y apellido para el registro académico.");
     }
+
     setLoading(true);
+    const rutLimpio = formData.rut.replace(/[^0-9kK]/g, '');
+    const rutCuerpo = rutLimpio.slice(0, -1);
+    const rutDv = rutLimpio.slice(-1);
+    const nombres = partesNombre[0];
+    const apellidos = partesNombre.slice(1).join(" ");
+
+    const payload = {
+      colegioId: Number(formData.colegioId) || 1,
+      rutCuerpo: rutCuerpo,
+      rutDv: rutDv,
+      nombres: nombres,
+      apellidos: apellidos,
+      email: formData.email.toLowerCase().trim(),
+      password: formData.password,
+      role: formData.rol === "Estudiante" ? "ALU" : "FAM_APO"
+    };
+
     try {
-      const response = await fetch(`${IDENTITY_API_URL}/register`, {
+      const res = await fetch(`${GATEWAY_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            ...formData, 
-            rut: formData.rut.replace(/\./g, ""), // Limpiar puntos para el backend
-            hijos: esApoderado ? hijos.map(h => h.replace(/\./g, "")) : [] 
-        })
+        body: JSON.stringify(payload)
       });
-      const data = await response.json();
-      alert(data.success ? "¡Registro exitoso!" : `Error: ${data.message}`);
-    } catch (error) { alert("Error de conexión"); }
-    finally { setLoading(false); }
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("¡Registro exitoso! Ya puedes iniciar sesión.");
+        window.location.href = "/login";
+      } else {
+        const errorMsg = data.errors ? data.errors.map((e: any) => e.msg).join(", ") : data.message;
+        alert("Error: " + (errorMsg || "Datos inválidos"));
+      }
+    } catch (error) {
+      console.error("Error completo:", error);
+      alert("Error de conexión con el servidor.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-100 font-sans">
-      {/* Sidebar Visual */}
-      <div className="hidden lg:flex w-100 bg-indigo-700 p-12 flex-col justify-center text-white shrink-0">
-        <div className="bg-white/10 w-16 h-16 rounded-2xl flex items-center justify-center mb-8">
-          <GraduationCap className="w-10 h-10" />
+    <div className="flex min-h-screen bg-[#F8F9FA] font-sans">
+      {/* SIDEBAR CAMBIADO A AZUL MARINO (#1A1A2E) */}
+      <div className="hidden lg:flex w-1/4 bg-[#1A1A2E] p-10 flex-col text-white justify-between shadow-xl">
+        <div>
+          <div className="bg-[#FF8FAB]/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 backdrop-blur-md border border-[#FF8FAB]/30">
+            <GraduationCap size={32} className="text-[#FF8FAB]" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-white">EduPago Lemac</h1>
+          <p className="text-slate-400 mt-3 text-sm leading-relaxed">
+            Plataforma centralizada para la gestión académica y financiera.
+          </p>
         </div>
-        <h1 className="text-4xl font-extrabold mb-6 leading-tight">Gestión Escolar Lemac</h1>
-        <p className="text-indigo-100 text-lg opacity-90">Plataforma centralizada de registro institucional.</p>
+        <div className="text-[10px] uppercase tracking-widest text-[#FF8FAB] font-bold">
+          Proyecto de Lemac 2026
+        </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
-        <div className="w-full max-w-3xl bg-white rounded-4xl shadow-xl border border-gray-100 p-8 my-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-8">Crear Nueva Cuenta</h2>
+      <div className="flex-1 p-6 overflow-y-auto flex items-center">
+        <div className="max-w-3xl mx-auto w-full bg-white rounded-[2.5rem] shadow-2xl p-10 lg:p-12 border border-gray-100">
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <header className="mb-2">
+              <h2 className="text-3xl font-black text-[#1A1A2E] tracking-tight">Crear cuenta</h2>
+              <p className="text-gray-400 text-sm mt-1">Completa tus datos para comenzar</p>
+            </header>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* ROL */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-500 ml-1">Selecciona tu Rol</label>
-              <select name="rol" required value={formData.rol} onChange={handleChange} className="w-full p-4 bg-indigo-50/30 border border-indigo-100 rounded-xl outline-none text-indigo-900 font-medium">
-                <option value="">Seleccionar cargo...</option>
-                {Object.entries(rolesCategorizados).map(([categoria, lista]) => (
-                  <optgroup key={categoria} label={categoria}>
-                    {lista.map(r => <option key={r} value={r}>{r}</option>)}
-                  </optgroup>
-                ))}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase ml-2 tracking-wider">Tipo de Cuenta</label>
+              <select 
+                required
+                value={formData.rol}
+                onChange={(e) => setFormData({...formData, rol: e.target.value})} 
+                className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#FF8FAB] focus:bg-[#FF8FAB]/5 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer text-[#1A1A2E]"
+              >
+                <option value="" disabled>Selecciona tu rol en la plataforma...</option>
+                <option value="Estudiante"> Alumno / Estudiante</option>
+                <option value="Apoderado"> Apoderado / Familia</option>
               </select>
             </div>
 
-            {/* RUT Y NOMBRE */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-500 ml-1">RUT</label>
-                <input name="rut" required placeholder="12.345.678-9" value={formData.rut} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none" />
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase ml-2 tracking-wider">Correo Electrónico</label>
+              <input type="email" placeholder="ejemplo@correo.cl" required 
+                onChange={(e) => setFormData({...formData, email: e.target.value})} 
+                className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#FF8FAB] focus:bg-white rounded-2xl text-sm outline-none transition-all text-[#1A1A2E]" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2 relative">
+                <label className="text-xs font-bold text-gray-400 uppercase ml-2 tracking-wider">RUT</label>
+                <div className="relative">
+                  <input placeholder="12.345.678-9" required value={formData.rut} maxLength={12}
+                    onChange={handleRutChange} 
+                    className={`w-full p-4 bg-gray-50 border-2 focus:bg-white rounded-2xl text-sm outline-none transition-all pr-12 text-[#1A1A2E]
+                      ${rutValido === true ? 'border-green-400' : rutValido === false ? 'border-red-400' : 'border-transparent focus:border-[#FF8FAB]'}`} />
+                  <div className="absolute right-4 top-4">
+                    {rutValido === true && <CheckCircle2 className="text-green-500" size={20} />}
+                    {rutValido === false && <AlertCircle className="text-red-500" size={20} />}
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-500 ml-1">Nombre Completo</label>
-                <input name="nombre" required placeholder="Ej: Bárbara Quezada" value={formData.nombre} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none" />
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase ml-2 tracking-wider">Nombre Completo</label>
+                <input placeholder="Ej: Juan Pérez" required 
+                  onChange={(e) => setFormData({...formData, nombre: e.target.value})} 
+                  className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#FF8FAB] focus:bg-white rounded-2xl text-sm outline-none transition-all text-[#1A1A2E]" />
               </div>
             </div>
 
-            {/* CURSO Y LETRA (Categorizado en Básica/Media) */}
-            {esEstudiante && (
-              <div className="grid grid-cols-2 gap-4 animate-in fade-in">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-500 ml-1">Curso</label>
-                  <select name="curso" value={formData.curso} onChange={handleChange} className="w-full p-3 bg-indigo-50/30 border border-indigo-100 rounded-xl">
-                    <option value="">Seleccionar...</option>
-                    <optgroup label="Enseñanza Básica">
-                      {cursos.filter(c => c.nombre.toLowerCase().includes("básico")).map(c => (
-                        <option key={c.id} value={c.id}>{c.nombre}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Enseñanza Media">
-                      {cursos.filter(c => c.nombre.toLowerCase().includes("medio")).map(c => (
-                        <option key={c.id} value={c.id}>{c.nombre}</option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-500 ml-1">Letra</label>
-                  <select name="letra" value={formData.letra} onChange={handleChange} className="w-full p-3 bg-indigo-50/30 border border-indigo-100 rounded-xl">
-                    <option value="">Letra...</option>
-                    {["A", "B", "C", "D"].map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* HIJOS (PARA APODERADOS) - RESTAURADO */}
-            {esApoderado && (
-              <div className="space-y-3 pt-4 border-t border-gray-100 animate-in slide-in-from-top-4 duration-300">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                    <Users size={16} className="text-indigo-500"/> Vincular Hijos (Alumnos)
-                  </label>
-                  <button type="button" onClick={() => setHijos([...hijos, ""])} className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full font-bold hover:bg-indigo-100 flex items-center gap-1">
-                    <Plus size={14}/> Agregar
+            {formData.rol === "Apoderado" && (
+              <div className="p-6 bg-slate-50 rounded-4xl border border-dashed border-[#FF8FAB]/40 space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-xs font-black text-[#FF8FAB] uppercase tracking-wider block">Hijos a cargo</span>
+                    <span className="text-[10px] text-gray-400 font-medium">RUT de los alumnos que representas</span>
+                  </div>
+                  <button type="button" onClick={addHijo} className="bg-[#FF8FAB] text-white p-2 rounded-xl shadow-md hover:bg-[#FF8FAB]/90 transition-all">
+                    <Plus size={20}/>
                   </button>
                 </div>
-                {hijos.map((hijo, index) => (
-                  <div key={index} className="flex gap-2">
-                    <input value={hijo} onChange={(e) => handleHijoChange(index, e.target.value)} placeholder="RUT del alumno (Ej: 22.333.444-5)" className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm" />
-                    {hijos.length > 1 && (
-                      <button type="button" onClick={() => {
-                        const newHijos = [...hijos];
-                        newHijos.splice(index, 1);
-                        setHijos(newHijos);
-                      }} className="p-3 text-red-400 hover:bg-red-50 rounded-xl transition-colors">
-                        <Trash2 size={18}/>
-                      </button>
-                    )}
+                {hijos.map((h, i) => (
+                  <div key={i} className="relative">
+                    <input placeholder={`Ej: 20.444.555-K`} required value={h.rut} maxLength={12}
+                      className={`w-full p-4 bg-white border-2 rounded-2xl text-sm outline-none transition-all shadow-sm pr-12 text-[#1A1A2E]
+                        ${h.valido === true ? 'border-green-400' : h.valido === false ? 'border-red-400' : 'border-slate-200 focus:border-[#FF8FAB]'}`}
+                      onChange={(e) => handleHijoChange(i, e.target.value)} />
+                    <div className="absolute right-4 top-4">
+                      {h.valido === true && <CheckCircle2 className="text-green-500" size={20} />}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* UBICACIÓN */}
-            <div className="space-y-4 pt-4 border-t border-gray-100">
-              <label className="text-sm font-bold text-gray-700 flex items-center gap-2"><MapPin size={16} className="text-indigo-500"/> Ubicación</label>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase ml-2 tracking-wider">Ubicación</label>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <select name="region" value={formData.region} onChange={handleChange} className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none">
+                <select onChange={(e) => setFormData({...formData, region: e.target.value})} className="p-4 bg-gray-50 rounded-2xl text-sm font-medium outline-none text-[#1A1A2E] cursor-pointer border border-transparent focus:border-[#FF8FAB]">
                   <option value="">Región</option>
-                  {regiones.map(r => <option key={r.id || r.regionId} value={r.id || r.regionId}>{r.nombre}</option>)}
+                  {Array.isArray(regiones) && regiones.map((r: any) => <option key={r.regionId || r.id} value={r.regionId || r.id}>{r.nombre}</option>)}
                 </select>
-                <select name="provincia" value={formData.provincia} disabled={!formData.region} onChange={handleChange} className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm">
+                <select disabled={!formData.region} onChange={(e) => setFormData({...formData, provincia: e.target.value})} className="p-4 bg-gray-50 rounded-2xl text-sm font-medium outline-none disabled:opacity-40 text-[#1A1A2E] cursor-pointer border border-transparent focus:border-[#FF8FAB]">
                   <option value="">Provincia</option>
-                  {provincias.map(p => <option key={p.id || p.provinciaId} value={p.id || p.provinciaId}>{p.nombre}</option>)}
+                  {Array.isArray(provincias) && provincias.map((p: any) => <option key={p.provinciaId || p.id} value={p.provinciaId || p.id}>{p.nombre}</option>)}
                 </select>
-                <select name="comuna" value={formData.comuna} disabled={!formData.provincia} onChange={handleChange} className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm">
+                <select disabled={!formData.provincia} onChange={(e) => setFormData({...formData, comuna: e.target.value})} className="p-4 bg-gray-50 rounded-2xl text-sm font-medium outline-none disabled:opacity-40 text-[#1A1A2E] cursor-pointer border border-transparent focus:border-[#FF8FAB]">
                   <option value="">Comuna</option>
-                  {comunas.map(c => <option key={c.id || c.comunaId} value={c.id || c.comunaId}>{c.nombre}</option>)}
+                  {Array.isArray(comunas) && comunas.map((c: any) => <option key={c.comunaId || c.id} value={c.comunaId || c.id}>{c.nombre}</option>)}
                 </select>
               </div>
             </div>
 
-            {/* PASSWORD Y VALIDACIONES */}
-            <div className="space-y-4 pt-4 border-t border-gray-100">
+            <div className="space-y-3 pt-2 border-t border-gray-100">
+              <label className="text-xs font-bold text-gray-400 uppercase ml-2 tracking-wider">Contraseña</label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative space-y-1">
-                  <label className="text-xs font-semibold text-gray-500 ml-1">Contraseña</label>
-                  <input name="password" type={showPassword ? "text" : "password"} required value={formData.password} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-8 text-gray-400">
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                <div className="relative">
+                  <input type={showPassword ? "text" : "password"} placeholder="Contraseña" required 
+                    onChange={(e) => setFormData({...formData, password: e.target.value})} 
+                    className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#FF8FAB] rounded-2xl text-sm outline-none transition-all text-[#1A1A2E]" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-gray-400 hover:text-[#FF8FAB] transition-colors">
+                    {showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}
                   </button>
                 </div>
-                <div className="relative space-y-1">
-                  <label className="text-xs font-semibold text-gray-500 ml-1">Confirmar</label>
-                  <input name="confirmPassword" type={showConfirmPassword ? "text" : "password"} required value={formData.confirmPassword} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none" />
-                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-8 text-gray-400">
-                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
+                <div className="relative">
+                  <input type={showPassword ? "text" : "password"} placeholder="Confirmar" required 
+                    onChange={(e) => setFormData({...formData, confirmarPassword: e.target.value})} 
+                    className={`w-full p-4 bg-gray-50 border-2 rounded-2xl text-sm outline-none transition-all text-[#1A1A2E]
+                      ${formData.confirmarPassword === '' ? 'border-transparent focus:border-[#FF8FAB]' : 
+                        contraseñasCoinciden ? 'border-green-400 focus:border-green-500' : 'border-red-400 focus:border-red-500'}`} />
                 </div>
               </div>
 
-              {/* Indicadores de Seguridad */}
-              <div className="grid grid-cols-2 gap-2 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
-                <ValidationItem label="8 caracteres mínimo" valid={passwordValidations.length} />
-                <ValidationItem label="Incluye un número" valid={passwordValidations.number} />
-                <ValidationItem label="Una Mayúscula" valid={passwordValidations.upper} />
-                <ValidationItem label="Carácter especial" valid={passwordValidations.special} />
+              {/* REQUISITOS EN ROSADO (#FF8FAB) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 px-2 bg-[#FF8FAB]/5 p-4 rounded-2xl border border-[#FF8FAB]/10">
+                <Req label="8+ chars" met={passwordValidations.length} />
+                <Req label="Mayúscula" met={passwordValidations.upper} />
+                <Req label="Número" met={passwordValidations.number} />
+                <Req label="Símbolo" met={passwordValidations.special} />
               </div>
             </div>
 
-            <button type="submit" disabled={loading} className={`w-full py-4 rounded-2xl font-bold text-white transition-all shadow-lg ${loading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
-              {loading ? "Procesando..." : "Crear Cuenta"}
+            {/* BOTÓN REGISTRO ROSADO (#FF8FAB) */}
+            <button type="submit" disabled={loading || !esPasswordValida || !contraseñasCoinciden || !formData.rol || rutValido === false} 
+              className={`w-full py-5 mt-4 rounded-2xl font-black text-white text-lg shadow-xl transition-all 
+              ${loading || !esPasswordValida || !contraseñasCoinciden || !formData.rol || rutValido === false ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none' : 'bg-[#FF8FAB] hover:bg-[#FF8FAB]/90 hover:-translate-y-1 active:scale-95 shadow-[#FF8FAB]/20'}`}>
+              {loading ? "Creando cuenta..." : "Completar Registro"}
             </button>
           </form>
         </div>
@@ -292,11 +319,10 @@ export default function RegistroPage() {
   )
 }
 
-function ValidationItem({ label, valid }: { label: string, valid: boolean }) {
+function Req({ label, met }: { label: string, met: boolean }) {
   return (
-    <div className="flex items-center gap-2">
-      {valid ? <CheckCircle2 size={14} className="text-green-500" /> : <Circle size={14} className="text-gray-300" />}
-      <span className={`text-[11px] ${valid ? 'text-green-700 font-bold' : 'text-gray-500'}`}>{label}</span>
+    <div className={`flex items-center gap-2 text-[10px] font-bold transition-colors ${met ? 'text-green-600' : 'text-gray-400'}`}>
+      {met ? <CheckCircle2 size={14} className="text-green-500"/> : <X size={14} className="opacity-50"/>} {label}
     </div>
   )
 }

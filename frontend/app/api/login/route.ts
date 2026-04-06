@@ -1,26 +1,63 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+import { getApiBaseUrl } from "@/lib/api/config";
+import type { AuthAccessTokenPayload } from "@/lib/types/auth";
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await request.json();
-    const microservicioUrl = "http://127.0.0.1:3001/api/v1/auth/login";
+    const body = await req.json();
+    const apiUrl = `${getApiBaseUrl()}/auth/login`;
 
-    const response = await fetch(microservicioUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+    const res = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
 
-    const result = await response.json();
+    const text = await res.text();
+    const responseData = text ? JSON.parse(text) : {};
 
-    if (!response.ok) {
-      return NextResponse.json({ error: result.message || "Error al iniciar sesión" }, { status: response.status });
+    if (!res.ok) {
+      const message =
+        typeof responseData === "object" && responseData !== null && "message" in responseData
+          ? String((responseData as { message?: string }).message)
+          : "Credenciales inválidas";
+      return NextResponse.json({ error: message }, { status: res.status });
     }
 
-    // Aquí recibes el Token para navegar por el sistema
-    return NextResponse.json({ message: "Login exitoso", data: result.data }, { status: 200 });
+    const accessToken = responseData.data?.accessToken as string | undefined;
+    const refreshToken = responseData.data?.refreshToken as string | undefined;
+    if (!accessToken) {
+      return NextResponse.json({ error: "Respuesta inválida del servidor" }, { status: 502 });
+    }
 
+    const decoded = jwt.decode(accessToken) as AuthAccessTokenPayload | null;
+
+    const nextResponse = NextResponse.json({
+      success: true,
+      data: {
+        accessToken,
+        refreshToken,
+        user: {
+          id: decoded?.userId,
+          colegioId: decoded?.colegioId,
+          role: decoded?.role ?? "alumno",
+          nombre: decoded?.nombre ?? "Usuario",
+        },
+      },
+    });
+
+    nextResponse.cookies.set("auth-token", accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24,
+      path: "/",
+    });
+
+    return nextResponse;
   } catch (error) {
-    return NextResponse.json({ error: "Error de conexión con ms-auth" }, { status: 500 });
+    console.error("API LOGIN ERROR:", error);
+    return NextResponse.json({ error: "Error de conexión con el Gateway" }, { status: 500 });
   }
 }

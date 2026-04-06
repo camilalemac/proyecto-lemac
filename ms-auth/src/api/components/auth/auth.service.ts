@@ -97,6 +97,7 @@ export const login = async (
     userId: user.userId,
     colegioId: user.colegioId,
     role: rolAsignado, // <--- ¡AQUÍ ESTÁ LA MAGIA!
+    nombre: `${user.nombres} ${user.apellidos}`,
   };
 
   const accessToken = signAccessToken(payload);

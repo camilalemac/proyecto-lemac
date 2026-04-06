@@ -1,10 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext", 
     "outDir": "./dist",
     "rootDir": "./",
+    /* Eliminamos 'baseUrl' y ajustamos 'paths' para el nuevo estándar */
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -13,10 +17,8 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "removeComments": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    }
+    /* Silenciamos las alertas de desuso de TS 7.0 por si acaso */
+    "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*", "app.ts", "server.ts"],
   "exclude": ["node_modules", "dist", "wallet", "**/*.test.ts"]

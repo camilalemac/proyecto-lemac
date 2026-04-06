@@ -10,14 +10,14 @@ export default function HomePage() {
         <div className="container mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
             <div className="bg-brand p-1.5 rounded-lg">
-              <GraduationCap className="h-6 w-6 text-white" />
+              < GraduationCap className="h-6 w-6 text-white" />
             </div>
             <span className="text-xl font-bold text-gray-900 tracking-tight">EduPago</span>
           </div>
           
+          {/* Navegación central vacía para mantener el espaciado entre logo y botones */}
           <nav className="hidden items-center gap-8 md:flex">
-            <Link href="#caracteristicas" className="text-sm font-medium text-gray-500 hover:text-brand transition-colors">Características</Link>
-            <Link href="#como-funciona" className="text-sm font-medium text-gray-500 hover:text-brand transition-colors">Cómo Funciona</Link>
+            {/* Los enlaces de Características y Cómo Funciona han sido eliminados */}
           </nav>
 
           <div className="flex items-center gap-3">
@@ -83,7 +83,7 @@ export default function HomePage() {
       <footer className="border-t border-gray-100 py-12">
         <div className="container mx-auto px-6 flex flex-col items-center justify-between gap-6 md:flex-row">
           <div className="flex items-center gap-2">
-            <GraduationCap className="h-6 w-6 text-brand" />
+            < GraduationCap className="h-6 w-6 text-brand" />
             <span className="font-bold text-gray-900">EduPago</span>
           </div>
           <p className="text-sm text-gray-400">© 2026 EduPago. Proyecto de cuotas Lemac.</p>
@@ -97,7 +97,6 @@ export default function HomePage() {
   )
 }
 
-// Subcomponente de Tarjeta con fondo plomo/gris moderno
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
     <div className="group rounded-3xl border border-gray-200 bg-plomo p-10 transition-all hover:bg-white hover:shadow-2xl hover:shadow-purple-100/50 hover:-translate-y-2 hover:border-brand/20">
