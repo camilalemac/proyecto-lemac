@@ -37,8 +37,10 @@ export const iniciarPagoMercadoPago = async (req: Request, res: Response): Promi
 
     // 6. Devolvemos el link al cliente (ThunderClient / Frontend)
     res.status(200).json({
+      url: resultado.urlPago, // Aquí va el link de MercadoPago
+      token: resultado.tokenPasarela, // Y el token por si lo necesitas para futuras confirmaciones
       message: "Link de pago generado con éxito",
-      data: resultado,
+     
     });
   } catch (error: any) {
     console.error("[Pasarela Controller] Error al iniciar pago:", error);
@@ -48,3 +50,14 @@ export const iniciarPagoMercadoPago = async (req: Request, res: Response): Promi
     });
   }
 };
+
+export const getConfiguracionBono = async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.status(200).json({
+      monto: 25000,
+      descripcion: "Bono Cooperación 2026"
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error al obtener configuración" });
+  }
+}

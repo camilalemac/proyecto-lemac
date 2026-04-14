@@ -21,17 +21,56 @@ export default function LoginPage() {
         password,
       })
 
-      const userRole = result.data.user.role?.toLowerCase() ?? ""
+      // El role viene desde el payload decodificado en tu ruta de API (NextResponse)
+      // Lo normalizamos a mayúsculas para que coincida exactamente con el script SQL
+      const userRole = result.data.user.role?.toUpperCase() ?? ""
 
-      if (userRole === "fam_apo" || userRole === "apoderado") {
-        router.push("/dashboard/apoderado")
-      } else if (userRole === "alu_reg" || userRole === "alumno") {
-        router.push("/dashboard/alumno")
-      } else {
-        router.push("/dashboard/alumno")
+      console.log("Iniciando sesión con rol:", userRole);
+
+      // --- LÓGICA DE REDIRECCIÓN BASADA EN TUS ROLES SQL ---
+      
+      // 1. Administradores del Sistema
+      if (userRole === 'SYS_ADMIN' || userRole === 'SUPERADMIN') {
+        router.push('/dashboard/admin');
+      } 
+      
+      // 2. Personal Directivo (Staff)
+      else if (userRole === 'STF_DIR') {
+        router.push('/dashboard/direccion');
+      } 
+      
+      // 3. Profesores
+      else if (userRole === 'STF_PROF') {
+        router.push('/dashboard/profesor');
+      } 
+      
+      // 4. Apoderados (Titulares y Directiva)
+      else if (userRole === 'FAM_APO' || userRole.startsWith('DIR_') && userRole.endsWith('_APO')) {
+        // Si es un tesorero/presidente de apoderados, podrías mandarlo a una vista especial
+        // o al dashboard general de apoderados con permisos extra.
+        router.push('/dashboard/apoderado');
+      } 
+      
+      // 5. Alumnos (Regulares y Directiva)
+      else if (userRole === 'ALU_REG' || userRole.startsWith('DIR_') && userRole.endsWith('_ALU')) {
+        router.push('/dashboard/alumno');
+      } 
+      
+      // 6. Centros Generales (CAL / CAP)
+      else if (userRole.startsWith('CEN_')) {
+        router.push('/dashboard/centros');
       }
-    } catch {
-      alert("Credenciales incorrectas o error de conexión")
+
+      // Caso por defecto
+      else {
+        console.warn("Rol no mapeado a una ruta:", userRole);
+        router.push('/dashboard/general'); 
+      }
+
+    } catch (error: any) {
+      console.error("Login error:", error)
+      // Capturamos el mensaje que devuelve tu NextResponse
+      alert(error.message || "Credenciales incorrectas o error de servidor");
     }
   }
 
@@ -43,36 +82,44 @@ export default function LoginPage() {
             <GraduationCap size={28} />
           </div>
           <h1 className="text-xl font-bold text-[#1A1A2E]">Gestión Lemac</h1>
-          <p className="text-sm text-gray-400">Inicia sesión</p>
+          <p className="text-sm text-gray-400">Plataforma Educativa 2026</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
-          <input
-            name="email"
-            type="email"
-            placeholder="correo@lemac.cl"
-            required
-            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#FF8FAB]"
-          />
-          <input
-            name="password"
-            type="password"
-            placeholder="••••••••"
-            required
-            minLength={8}
-            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#FF8FAB]"
-          />
+          <div>
+            <label className="text-xs font-semibold text-gray-500 ml-1">Email</label>
+            <input
+              name="email"
+              type="email"
+              placeholder="correo@lemac.cl"
+              required
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#FF8FAB] outline-none transition-all"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-500 ml-1">Contraseña</label>
+            <input
+              name="password"
+              type="password"
+              placeholder="••••••••"
+              required
+              minLength={8}
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#FF8FAB] outline-none transition-all"
+            />
+          </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#FF8FAB] text-white py-3 rounded-lg font-semibold hover:bg-[#FF8FAB]/90 disabled:opacity-50"
+            className="w-full bg-[#FF8FAB] text-white py-3 rounded-lg font-semibold hover:bg-[#FF8FAB]/90 disabled:opacity-50 shadow-md transition-colors"
           >
-            {loading ? "Ingresando..." : "Iniciar sesión"}
+            {loading ? "Verificando..." : "Ingresar al Sistema"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-500">
-          <Link href="/registro" className="text-[#FF8FAB] hover:underline">
-            Crear cuenta
+        
+        <p className="mt-6 text-center text-sm text-gray-500">
+          ¿No tienes cuenta? {" "}
+          <Link href="/registro" className="text-[#FF8FAB] font-bold hover:underline">
+            Regístrate aquí
           </Link>
         </p>
       </div>

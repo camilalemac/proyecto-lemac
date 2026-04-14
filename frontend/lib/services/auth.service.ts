@@ -3,12 +3,17 @@ import type { BffLoginSuccess, LoginRequestBody } from "@/lib/types/auth";
 /**
  * Login vía Route Handler (cookie httpOnly + mismo origen).
  */
+
+
 export async function loginViaBff(body: LoginRequestBody): Promise<BffLoginSuccess> {
   const res = await fetch("/api/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+
+  
 
   const text = await res.text();
   const parsed = text ? (JSON.parse(text) as unknown) : {};
@@ -23,3 +28,4 @@ export async function loginViaBff(body: LoginRequestBody): Promise<BffLoginSucce
 
   return parsed as BffLoginSuccess;
 }
+

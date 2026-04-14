@@ -5,7 +5,7 @@ export async function GET(req: NextRequest) {
     const token = req.headers.get("authorization");
 
     const res = await fetch(
-      "http://127.0.0.1:3007/api/v1/pagos/mis-cobros/resumen", // 👈 ajusta si cambiaste
+      "http://127.0.0.1:3002/api/v1/pagos/mis-cobros/resumen", // 👈 ajusta si cambiaste
       {
         method: "GET",
         headers: {

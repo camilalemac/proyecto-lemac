@@ -47,8 +47,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // ✅ ACTUALIZACIÓN: httpOnly puesto en false para lectura del lado del cliente
     nextResponse.cookies.set("auth-token", accessToken, {
-      httpOnly: true,
+      httpOnly: false, 
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 60 * 60 * 24,

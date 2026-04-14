@@ -1,30 +1,55 @@
 @import "tailwindcss";
+@config "../tailwind.config.mjs";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Fondo plomo muy claro (Soft Slate) para que el texto navy resalte */
+  --background: #F8FAFC; 
+  
+  /* Texto Azul Marino Profundo */
+  --foreground: #0F172A;
+  
+  /* Paleta Lemac */
+  --brand-pink: #FF8FAB;
+  --brand-navy: #0F172A;
+  /* Soft pink para fondos sutiles */
+  --brand-pink-soft: #FF8FAB15; 
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  
+  /* Colores de marca */
+  --color-brand: var(--brand-pink);
+  --color-brand-dark: var(--brand-navy);
+  --color-brand-soft: var(--brand-pink-soft);
+  
+  /* Fuentes */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-
-  /* AGREGA ESTAS LÍNEAS AQUÍ ABAJO */
-  --color-brand: #5A189A;
-  --color-brand-dark: #48127a;
-  --color-plomo: #F8FAFC; 
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
+/* Reset y estilos base */
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Animación personalizada para el logo */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Clase de utilidad para el difuminado del fondo si es necesario */
+.blur-layer {
+  filter: blur(120px);
+  pointer-events: none;
 }

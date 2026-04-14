@@ -1,134 +1,175 @@
 "use client"
-import { useState, useEffect } from "react"
-import { Users, ShieldCheck, CreditCard, Baby, Phone, FileText, Loader2, AlertCircle } from "lucide-react"
+import React, { useState, useEffect } from "react"
+import { Users, Loader2, Heart, ArrowLeft, GraduationCap, MapPin, Search, AlertCircle, ChevronRight, Mail } from "lucide-react"
 import Cookies from "js-cookie"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 
-interface RelacionFamiliar {
+// Interfaz ajustada a lo que devuelve tu familia.repository (QueryTypes.SELECT)
+interface Hijo {
   RELACION_ID: number;
   ALUMNO_ID: number;
+  ALUMNO_NOMBRES: string;
+  ALUMNO_APELLIDOS: string;
+  ALUMNO_RUT: string;
+  ALUMNO_RUT_DV: string;
   TIPO_RELACION: string;
-  ES_APODERADO_ACAD: string;
   ES_TITULAR_FINAN: string;
-  AUTORIZADO_RETIRO: string;
-  alumno: {
-    NOMBRE: string;
-    APELLIDO_PATERNO: string;
-    APELLIDO_MATERNO: string;
-    RUT: string;
-    FECHA_NACIMIENTO: string;
-  }
+  ES_APODERADO_ACAD: string;
+  CURSO?: string; // Viene del JOIN si lo agregas o se deja opcional
 }
 
-export default function FamiliaPage() {
-  const [familia, setFamilia] = useState<RelacionFamiliar[]>([])
+export default function MiFamiliaPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const [pupilos, setPupilos] = useState<Hijo[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const GATEWAY_URL = "http://127.0.0.1:3007/api/v1";
 
   useEffect(() => {
-    const fetchFamilia = async () => {
+    const fetchHijos = async () => {
       try {
         const token = Cookies.get("auth-token")
         
+        // 🔒 BLOQUEO DE SEGURIDAD: Redirigir si no hay sesión
         if (!token) {
-          console.error("No se encontró el token de autenticación");
-          setLoading(false);
-          return;
+          router.push("/login")
+          return
         }
 
-        // ✅ URL Corregida y headers completos
-        const res = await fetch("http://127.0.0.1:3007/api/v1/academico/familia/mis-familiares", {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-
-        const data = await res.json()
-        console.log("Datos recibidos:", data) // Para que verifiques la estructura en la consola
-
-        if (data.success) {
-          setFamilia(data.data)
+        const headers = { 
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         }
-      } catch (err) {
+
+        // ✅ Petición al backend real (Usa la ruta de tu familia.routes.ts)
+        const res = await fetch(`${GATEWAY_URL}/academico/familias/mis-hijos`, { headers })
+        const contentType = res.headers.get("content-type")
+        
+        if (contentType && contentType.includes("application/json")) {
+           const json = await res.json()
+           if (json.success) {
+              setPupilos(json.data || [])
+           } else {
+              setErrorMsg(json.message || "No se pudo cargar la información familiar.")
+           }
+        } else {
+           throw new Error("Error de comunicación con el servidor (Respuesta no JSON).")
+        }
+
+      } catch (err: any) {
         console.error("Error cargando familia:", err)
+        setErrorMsg("Problemas al conectar con el microservicio académico.")
       } finally {
         setLoading(false)
       }
     }
+    
+    fetchHijos()
+  }, [router])
 
-    fetchFamilia()
-  }, [])
+  const pupilosFiltrados = pupilos.filter(p => {
+    const nombreCompleto = `${p.ALUMNO_NOMBRES} ${p.ALUMNO_APELLIDOS}`.toLowerCase();
+    return nombreCompleto.includes(searchTerm.toLowerCase());
+  });
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FDFCFE]">
-      <Loader2 className="animate-spin text-purple-400" size={40} />
+    <div className="flex h-screen flex-col items-center justify-center bg-[#FDF2F5] gap-4">
+      <Loader2 className="animate-spin text-[#FF8FAB]" size={40} />
+      <p className="text-[10px] font-black uppercase tracking-widest text-[#1A1A2E]/60">Consultando Oracle Académico...</p>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-[#FDFCFE] p-8">
-      <header className="mb-10">
-        <h1 className="text-3xl font-black text-gray-800 tracking-tight">Mi Grupo Familiar</h1>
-        <p className="text-purple-400 font-medium text-sm italic">Gestión de pupilos y autorizaciones de retiro</p>
+    <div className="min-h-screen bg-[#FDF2F5] p-8 space-y-10 animate-in fade-in duration-700">
+      
+      <Link href="/dashboard/apoderado" className="flex items-center gap-2 text-slate-400 hover:text-[#1A1A2E] transition-all font-black text-[10px] uppercase tracking-[0.2em] group w-fit">
+        <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> 
+        Volver al Portal
+      </Link>
+
+      <header className="bg-white p-12 rounded-[4rem] shadow-sm border border-pink-100 flex flex-col lg:flex-row justify-between items-center gap-8 relative overflow-hidden">
+        <Heart size={250} className="absolute -right-10 -bottom-10 text-pink-50 opacity-50" />
+        
+        <div className="flex items-center gap-6 relative z-10 w-full lg:w-auto">
+          <div className="bg-[#1A1A2E] p-6 rounded-3xl text-white shadow-2xl">
+            <Users size={40} className="text-[#FF8FAB]" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-black text-[#1A1A2E] uppercase tracking-tighter leading-none italic">Mi Familia</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2 italic">Cargas Académicas Registradas</p>
+          </div>
+        </div>
+
+        <div className="relative z-10 w-full lg:w-96">
+           <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none text-slate-400">
+              <Search size={18} />
+           </div>
+           <input 
+             type="text" 
+             placeholder="Buscar alumno por nombre..."
+             value={searchTerm}
+             onChange={(e) => setSearchTerm(e.target.value)}
+             className="w-full bg-slate-50 border border-slate-100 rounded-4xl pl-14 pr-6 py-5 font-bold text-[#1A1A2E] text-sm outline-none focus:ring-2 focus:ring-pink-200 transition-all placeholder:text-slate-300"
+           />
+        </div>
       </header>
 
-      <div className="space-y-8">
-        {familia.length > 0 ? (
-          familia.map((rel) => (
-            <div key={rel.RELACION_ID} className="bg-white rounded-[3rem] border border-purple-50 shadow-sm overflow-hidden transition-all hover:shadow-md group">
-              <div className="p-8 md:p-10 flex flex-col md:flex-row gap-8 items-center md:items-start">
-                
-                {/* Avatar con gradiente aesthetic */}
-                <div className="w-24 h-24 bg-linear-to-tr from-pink-100 to-purple-100 rounded-4xl flex items-center justify-center text-purple-400 shadow-inner group-hover:scale-105 transition-transform">
-                  <Baby size={48} />
+      {errorMsg && (
+        <div className="bg-rose-50 text-rose-600 p-6 rounded-3xl mb-8 flex items-center gap-4 border border-rose-100 font-bold text-xs uppercase tracking-tight">
+          <AlertCircle size={20} /> {errorMsg}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 relative z-10 pb-20">
+        {pupilosFiltrados.length > 0 ? pupilosFiltrados.map((hijo) => (
+          <div key={hijo.RELACION_ID} className="bg-white rounded-[3.5rem] border border-pink-50 shadow-sm hover:shadow-xl transition-all overflow-hidden group flex flex-col justify-between">
+            <div className="p-10">
+              <div className="flex justify-between items-start mb-6">
+                <div className="bg-pink-50 p-4 rounded-2xl text-rose-400 border border-pink-100">
+                   <GraduationCap size={28} />
                 </div>
-
-                <div className="flex-1 text-center md:text-left">
-                  <div className="flex flex-col md:flex-row md:items-center gap-3 mb-2">
-                    <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tighter">
-                      {rel.alumno.NOMBRE} {rel.alumno.APELLIDO_PATERNO}
-                    </h2>
-                    <span className="inline-block px-4 py-1 bg-purple-500 text-white text-[10px] font-black rounded-full uppercase tracking-widest self-center md:self-auto">
-                      {rel.TIPO_RELACION}
-                    </span>
-                  </div>
-                  <p className="text-gray-400 font-medium mb-6">RUT: {rel.alumno.RUT}</p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {/* Badge Finanzas */}
-                    <div className={`p-4 rounded-3xl border transition-colors ${rel.ES_TITULAR_FINAN === 'S' ? 'bg-yellow-50 border-yellow-100' : 'bg-gray-50 border-gray-100 opacity-60'}`}>
-                      <div className="flex items-center gap-3 mb-1">
-                        <CreditCard size={16} className={rel.ES_TITULAR_FINAN === 'S' ? 'text-yellow-500' : 'text-gray-400'} />
-                        <span className="text-[9px] font-black uppercase tracking-wider text-gray-500">Finanzas</span>
-                      </div>
-                      <p className="text-xs font-bold text-gray-700">{rel.ES_TITULAR_FINAN === 'S' ? 'Titular de Pago' : 'Sin acceso'}</p>
-                    </div>
-
-                    {/* Badge Académico */}
-                    <div className={`p-4 rounded-3xl border transition-colors ${rel.ES_APODERADO_ACAD === 'S' ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100 opacity-60'}`}>
-                      <div className="flex items-center gap-3 mb-1">
-                        <FileText size={16} className={rel.ES_APODERADO_ACAD === 'S' ? 'text-blue-500' : 'text-gray-400'} />
-                        <span className="text-[9px] font-black uppercase tracking-wider text-gray-500">Académico</span>
-                      </div>
-                      <p className="text-xs font-bold text-gray-700">{rel.ES_APODERADO_ACAD === 'S' ? 'Gestión de Notas' : 'Solo lectura'}</p>
-                    </div>
-
-                    {/* Badge Retiro */}
-                    <div className={`p-4 rounded-3xl border transition-colors ${rel.AUTORIZADO_RETIRO === 'S' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
-                      <div className="flex items-center gap-3 mb-1">
-                        <ShieldCheck size={16} className={rel.AUTORIZADO_RETIRO === 'S' ? 'text-green-500' : 'text-red-400'} />
-                        <span className="text-[9px] font-black uppercase tracking-wider text-gray-500">Seguridad</span>
-                      </div>
-                      <p className="text-xs font-bold text-gray-700">{rel.AUTORIZADO_RETIRO === 'S' ? 'Autorizado Retiro' : 'No Autorizado'}</p>
-                    </div>
-                  </div>
+                <span className="bg-[#1A1A2E] text-[#FF8FAB] px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest shadow-md">
+                   {hijo.TIPO_RELACION}
+                </span>
+              </div>
+              
+              <h3 className="text-2xl font-black text-[#1A1A2E] uppercase tracking-tighter mb-1">
+                 {hijo.ALUMNO_NOMBRES} <br /> {hijo.ALUMNO_APELLIDOS}
+              </h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">
+                 RUT: {hijo.ALUMNO_RUT}-{hijo.ALUMNO_RUT_DV}
+              </p>
+              
+              <div className="space-y-4 border-t border-pink-50 pt-6">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={12}/> Registro</p>
+                  <p className="text-sm font-black text-[#1A1A2E] uppercase">VÍNCULO ACTIVO</p>
+                </div>
+                
+                <div className="flex gap-2">
+                   <div className={`flex-1 p-3 rounded-xl border text-center text-[8px] font-black uppercase tracking-widest ${hijo.ES_TITULAR_FINAN === 'S' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                      Sostenedor Finan.
+                   </div>
+                   <div className={`flex-1 p-3 rounded-xl border text-center text-[8px] font-black uppercase tracking-widest ${hijo.ES_APODERADO_ACAD === 'S' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                      Apoderado Acad.
+                   </div>
                 </div>
               </div>
             </div>
-          ))
-        ) : (
-          <div className="bg-white p-20 rounded-[3rem] border border-dashed border-purple-200 flex flex-col items-center gap-4">
-            <AlertCircle className="text-purple-200" size={64} />
-            <p className="text-gray-400 font-black uppercase text-xs tracking-[0.2em]">No se encontraron alumnos vinculados</p>
+
+            <div className="bg-slate-50 p-6 border-t border-slate-100">
+               <Link href={`/dashboard/apoderado/cuotas?alumno=${hijo.ALUMNO_ID}`} className="w-full bg-white text-[#1A1A2E] py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-[#1A1A2E] hover:text-[#FF8FAB] transition-colors shadow-sm border border-slate-200">
+                  Estado de Cuenta <ChevronRight size={14} />
+               </Link>
+            </div>
+          </div>
+        )) : !loading && !errorMsg && (
+          <div className="col-span-full py-20 flex flex-col items-center opacity-40">
+            <Users size={80} className="text-[#1A1A2E] mb-6" />
+            <p className="font-black uppercase tracking-widest text-[#1A1A2E] text-xl">Sin hijos vinculados</p>
           </div>
         )}
       </div>
