@@ -9,9 +9,16 @@ import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 
+// IMPORTACIONES NUEVAS (Nuestra Arquitectura Limpia)
+import { adminService } from "../../../services/dashboardService"
+import { formatCurrencyCLP } from "@/utils/formatters"
+import { ITransaccion } from "@/types/admin.types"
+
 export default function AdminDashboardPage() {
   const router = useRouter()
-  const [transacciones, setTransacciones] = useState<any[]>([])
+  
+  // Fíjate cómo ahora TypeScript sabe que este array es de transacciones reales
+  const [transacciones, setTransacciones] = useState<ITransaccion[]>([])
   const [metrics, setMetrics] = useState({ totalRecaudado: 0, totalTransacciones: 0 })
   const [loading, setLoading] = useState(true)
   const [conexionBackend, setConexionBackend] = useState(true)
@@ -24,50 +31,38 @@ export default function AdminDashboardPage() {
   const fetchData = async () => {
     const token = Cookies.get("auth-token")
       
-    // ✅ VALIDACIÓN ESTRICTA: Si no hay token, expulsar al login inmediatamente
+    // VALIDACIÓN ESTRICTA: Si no hay token, expulsar al login inmediatamente
     if (!token) {
       router.push("/login")
       return;
     }
 
     try {
-      const headers: Record<string, string> = { 'Authorization': `Bearer ${token}` }
+      // 1. Perfil Real usando nuestro servicio
+      const profile = await adminService.getMe();
       
-      // 1. Perfil Real (Verificando identidad en el backend)
-      const resMe = await fetch("http://127.0.0.1:3007/api/v1/auth/me", { headers })
-      const dataMe = await resMe.json()
-      
-      if (dataMe.success && dataMe.data) {
-        setUserProfile({
-          nombre: `${dataMe.data.nombres} ${dataMe.data.apellidos}`,
-          rol: "Administrador de Sistema (Nivel 9)"
-        })
+      setUserProfile({
+        nombre: `${profile.nombres} ${profile.apellidos}`,
+        rol: "Administrador de Sistema (Nivel 9)"
+      })
 
-        // 2. Monitoreo Global de Transacciones del Colegio
-        const resTrans = await fetch(`http://127.0.0.1:3007/api/v1/pagos/transaccion/colegio/${dataMe.data.colegioId}`, { headers }).catch(() => null)
-        
-        if (resTrans && resTrans.ok) {
-          const dataTrans = await resTrans.json()
-          const arrTransacciones = Array.isArray(dataTrans) ? dataTrans : (dataTrans.data || [])
-          setTransacciones(arrTransacciones)
-          
-          // Calcular métricas
-          const total = arrTransacciones.reduce((acc: number, t: any) => acc + Number(t.MONTO_PAGO || t.montoPago || 0), 0)
-          setMetrics({ totalRecaudado: total, totalTransacciones: arrTransacciones.length })
-        }
-        setConexionBackend(true)
-      } else {
-        // Si el token es inválido o caducó en el backend
-        Cookies.remove("auth-token")
-        router.push("/login")
-      }
+      // 2. Monitoreo Global de Transacciones usando el servicio
+      const arrTransacciones = await adminService.getTransaccionesColegio(profile.colegioId);
+      setTransacciones(arrTransacciones);
+      
+      // Calcular métricas (Ahora estamos seguros de que 'montoPago' viene limpio desde el Adapter)
+      const total = arrTransacciones.reduce((acc, t) => acc + Number(t.montoPago || 0), 0);
+      setMetrics({ totalRecaudado: total, totalTransacciones: arrTransacciones.length });
+      
+      setConexionBackend(true);
+
     } catch (err) {
-      console.error("Error conectando con el backend:", err)
-      setConexionBackend(false)
-      setMetrics({ totalRecaudado: 0, totalTransacciones: 0 })
-      setTransacciones([])
+      console.error("Error conectando con el backend:", err);
+      setConexionBackend(false);
+      setMetrics({ totalRecaudado: 0, totalTransacciones: 0 });
+      setTransacciones([]);
     } finally {
-      setTimeout(() => setLoading(false), 500)
+      setTimeout(() => setLoading(false), 500);
     }
   }
 
@@ -142,7 +137,7 @@ export default function AdminDashboardPage() {
 
         {/* MÉTRICAS */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <AdminStatCard title="Recaudación Global" value={`$${metrics.totalRecaudado.toLocaleString('es-CL')}`} icon={<Wallet/>} />
+          <AdminStatCard title="Recaudación Global" value={formatCurrencyCLP(metrics.totalRecaudado)} icon={<Wallet/>} />
           <AdminStatCard title="Total Transacciones" value={metrics.totalTransacciones} icon={<History/>} />
           <AdminStatCard title="Uptime Engine" value="100%" icon={<Globe/>} />
           <AdminStatCard title="Nivel de Sistema" value="ROOT" icon={<ShieldAlert/>} />
@@ -197,10 +192,14 @@ export default function AdminDashboardPage() {
                 {transacciones.length > 0 ? transacciones.map((t, i) => (
                   <div key={i} className="p-5 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center group hover:bg-white/10 transition-all">
                     <div>
-                      <p className="text-[10px] font-black text-[#FF8FAB] uppercase">{t.METODO_PAGO || t.metodoPago || "DB_RECORD"}</p>
-                      <p className="text-[11px] font-bold text-white/70 mt-1 uppercase">Folio: {t.COBRO_ID || t.cobroId}</p>
+                      {/* Mira qué limpio queda sin el '||' gracias al Mapper */}
+                      <p className="text-[10px] font-black text-[#FF8FAB] uppercase">{t.metodoPago}</p>
+                      <p className="text-[11px] font-bold text-white/70 mt-1 uppercase">Folio: {t.cobroId}</p>
                     </div>
-                    <p className="font-black text-pink-400 text-sm italic">+${Number(t.MONTO_PAGO || t.montoPago || 0).toLocaleString('es-CL')}</p>
+                    {/* Reutilizamos nuestra función global de formato de dinero */}
+                    <p className="font-black text-pink-400 text-sm italic">
+                      +{formatCurrencyCLP(Number(t.montoPago))}
+                    </p>
                   </div>
                 )) : (
                   <div className="flex flex-col items-center justify-center h-full opacity-20 text-center px-10">

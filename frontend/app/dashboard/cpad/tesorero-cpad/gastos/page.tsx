@@ -1,119 +1,99 @@
 "use client"
 import React, { useState, useEffect } from "react"
-import { 
-  Receipt, Search, Mail, CheckCircle2, Clock, 
-  AlertTriangle, Loader2, Users, FileText, ShieldAlert, ArrowLeft 
-} from "lucide-react"
-import Cookies from "js-cookie"
+import { PieChart as ChartIcon, Loader2, Filter, AlertCircle, ArrowLeft } from "lucide-react"
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 
-export default function CuotasTesoreriaPage() {
+// ARQUITECTURA LIMPIA (Sube 5 niveles: gastos -> tesorero-cpad -> cpad -> dashboard -> app -> raíz)
+import { authService } from "../../../../../services/authService"
+import { pagosService } from "../../../../../services/pagosService"
+
+export default function AnalisisGastosTesoreriaPage() {
   const router = useRouter()
-  const [busquedaId, setBusquedaId] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [authLoading, setAuthLoading] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [cuotasAlumno, setCuotasAlumno] = useState<any[]>([])
-  const [resumen, setResumen] = useState<any>(null)
+  
+  const [gastos, setGastos] = useState<any[]>([])
+  const [totalEgresos, setTotalEgresos] = useState(0)
 
-  const GATEWAY_URL = "http://127.0.0.1:3007/api/v1";
-
-  // 1. VALIDACIÓN DE IDENTIDAD AL CARGAR
   useEffect(() => {
-    const verificarPermisos = async () => {
+    const initData = async () => {
       try {
-        const token = Cookies.get("auth-token")
-        if (!token) {
+        setLoading(true)
+        
+        // 1. Validar Identidad y Permisos
+        const perfil = await authService.getMe()
+        
+        // Roles permitidos: Tesoreros y Presidentes de curso/colegio
+        const rolesTesoreria = ['CEN_TES_CAP', 'DIR_TES_APO', 'CEN_TES_CAL', 'DIR_TES_ALU', 'CEN_PRES_CAP', 'DIR_PRES_APO']
+        const tienePermiso = perfil.roles?.some((r: any) => rolesTesoreria.includes(r.rol_code))
+
+        if (!tienePermiso) {
           setIsAuthorized(false)
+          setLoading(false)
           return
         }
 
-        const res = await fetch(`${GATEWAY_URL}/identity/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        const json = await res.json()
+        setIsAuthorized(true)
+        const colId = perfil.COLEGIO_ID || 1
 
-        if (json.status === "success") {
-          const roles = json.data?.roles || []
-          const esTesorero = roles.some((r: any) => 
-            ['CEN_TES_CAP', 'DIR_TES_APO', 'CEN_TES_CAL', 'DIR_TES_ALU'].includes(r.rol_code)
-          )
-          setIsAuthorized(esTesorero)
-        } else {
-          setIsAuthorized(false)
-        }
-      } catch (e) {
+        // 2. Traer Movimientos Reales desde Oracle
+        const movimientosData = await pagosService.getMovimientosPorColegio(colId)
+        
+        // 3. Filtrar Egresos
+        const egresos = movimientosData.filter((m: any) => (m.TIPO_MOVIMIENTO || m.tipo_movimiento) === 'EGRESO')
+        
+        const total = egresos.reduce((acc: number, m: any) => acc + Number(m.MONTO || m.monto || 0), 0)
+        setTotalEgresos(total)
+
+        // 4. Agrupar Egresos por Categoría
+        const catMap: { [key: string]: number } = {}
+        egresos.forEach((m: any) => {
+          const label = m.CATEGORIA_NOMBRE || m.categoria_nombre || `Categoría ${m.CATEGORIA_ID || m.categoria_id || 'General'}`
+          catMap[label] = (catMap[label] || 0) + Number(m.MONTO || m.monto || 0)
+        })
+
+        // 5. Formatear Data para Recharts
+        const arrayGastos = Object.keys(catMap).map(k => ({
+          name: k,
+          value: catMap[k],
+          porcentaje: total > 0 ? Math.round((catMap[k] / total) * 100) : 0
+        }))
+
+        // Ordenar de mayor a menor gasto
+        setGastos(arrayGastos.sort((a, b) => b.value - a.value))
+
+      } catch (e: any) {
+        console.error("Error al cargar análisis de gastos:", e)
+        setErrorMsg(e.message || "Error al sincronizar con el Ledger Oracle.")
         setIsAuthorized(false)
       } finally {
-        setAuthLoading(false)
+        setLoading(false)
       }
     }
-    verificarPermisos()
+
+    initData()
   }, [])
 
-  // 2. BÚSQUEDA TRANSACCIONAL EN MS_PAGOS
-  const handleBuscarCobros = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!busquedaId.trim()) return
+  const COLORS = ["#FF8FAB", "#1A1A2E", "#D4C4FB", "#A7E8BD", "#FFB7C5", "#E2E8F0"]
 
-    setLoading(true)
-    setError(null)
-    setCuotasAlumno([])
-    setResumen(null)
-
-    try {
-      const token = Cookies.get("auth-token")
-      const headers = { 
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json' 
-      }
-
-      // Consulta a MS_PAGOS vía Gateway
-      const [resCobros, resResumen] = await Promise.all([
-        fetch(`${GATEWAY_URL}/pagos/cuotas/alumno/${busquedaId}`, { headers }),
-        fetch(`${GATEWAY_URL}/pagos/cuotas/alumno/${busquedaId}/resumen`, { headers })
-      ])
-
-      // Escudo Anti-HTML (Previene error de token '<')
-      if (!resCobros.headers.get("content-type")?.includes("application/json")) {
-        throw new Error("El servicio de Pagos devolvió un error de sistema (HTML).")
-      }
-
-      const jsonCobros = await resCobros.json()
-      const jsonResumen = await resResumen.json()
-
-      if (jsonCobros.success && Array.isArray(jsonCobros.data)) {
-        setCuotasAlumno(jsonCobros.data)
-      } else {
-        throw new Error("No se encontraron registros de cobro para este ID de alumno.")
-      }
-
-      if (jsonResumen.success) {
-        setResumen(jsonResumen.data)
-      }
-    } catch (err: any) {
-      setError(err.message || "Error al sincronizar con Oracle Cloud.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (authLoading) return (
+  if (loading) return (
     <div className="flex h-[80vh] flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-[#FF8FAB]" size={48} strokeWidth={1.5} />
-      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Autenticando Ledger...</p>
+      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Procesando Reporte Financiero...</p>
     </div>
   )
 
   if (isAuthorized === false) return (
-    <div className="flex h-[80vh] items-center justify-center p-6 text-center">
+    <div className="flex h-screen items-center justify-center bg-[#FDF2F5] p-6 text-center">
       <div className="max-w-xl p-12 bg-white rounded-[3rem] border border-red-100 shadow-xl shadow-red-500/5">
-        <ShieldAlert size={60} className="text-red-500 mx-auto mb-6" strokeWidth={1} />
-        <h2 className="text-2xl font-black text-[#1A1A2E] mb-2 uppercase tracking-tighter italic">Acceso Restringido</h2>
-        <p className="text-slate-500 text-sm mb-10 max-w-sm mx-auto">La gestión de deudas es exclusiva para la Directiva de Tesorería Institucional.</p>
-        <button onClick={() => router.push('/login')} className="bg-[#1A1A2E] text-white px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-all hover:bg-rose-500">
-          <ArrowLeft size={16} /> Volver al Login
+        <AlertCircle size={60} className="text-red-500 mx-auto mb-6" strokeWidth={1} />
+        <h2 className="text-2xl font-black text-[#1A1A2E] mb-2 uppercase tracking-tighter">Acceso Restringido</h2>
+        <p className="text-slate-500 text-sm mb-10">La lectura de análisis financieros es exclusiva para la Directiva de Tesorería.</p>
+        <button onClick={() => router.push('/dashboard/cpad/tesorero-cpad')} className="bg-[#1A1A2E] text-white px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-all hover:bg-slate-800">
+          <ArrowLeft size={16} /> Volver al Panel
         </button>
       </div>
     </div>
@@ -122,154 +102,112 @@ export default function CuotasTesoreriaPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-700 pb-10">
       
-      {/* HEADER DE BÚSQUEDA */}
-      <header className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
-          <div className="flex items-center gap-6">
-            <div className="bg-[#1A1A2E] p-5 rounded-2xl text-[#FF8FAB] shadow-xl shadow-slate-900/10">
-              <Users size={32} />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black text-[#1A1A2E] uppercase tracking-tighter leading-none italic">Consultoría de Alumnos</h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 flex items-center gap-2 italic">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Sincronizado con MS_PAGOS en Oracle
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* Botón Volver */}
+      <div className="flex items-center">
+        <Link 
+          href="/dashboard/cpad/tesorero-cpad" 
+          className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#1A1A2E] transition-colors bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100 hover:border-[#FF8FAB]/50"
+        >
+          <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+          Dashboard Tesorería
+        </Link>
+      </div>
 
-        <form onSubmit={handleBuscarCobros} className="flex gap-4">
-          <div className="relative flex-1 group">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#FF8FAB] transition-colors" size={20} />
-            <input 
-              type="number" 
-              placeholder="ID Alumno (Revisar tabla ACA_MATRICULAS)"
-              className="w-full pl-14 pr-6 py-6 bg-slate-50 border-none rounded-4xl text-sm font-black focus:ring-4 focus:ring-[#FF8FAB]/20 outline-none transition-all placeholder:font-medium text-[#1A1A2E]"
-              value={busquedaId}
-              onChange={(e) => setBusquedaId(e.target.value)}
-              required
-            />
+      {/* HEADER INSTITUCIONAL */}
+      <header className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="flex items-center gap-6 text-center md:text-left">
+           <div className="bg-[#1A1A2E] p-5 rounded-2xl text-[#FF8FAB] shadow-xl shadow-slate-900/10">
+             <ChartIcon size={32} />
+           </div>
+           <div>
+             <h1 className="text-3xl font-black text-[#1A1A2E] uppercase tracking-tighter leading-none italic">Análisis de Gastos</h1>
+             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Distribución Presupuestaria Anual</p>
+           </div>
+        </div>
+        
+        {totalEgresos > 0 && (
+          <div className="bg-[#FDF2F5] px-8 py-5 rounded-4xl border border-pink-100 text-right">
+            <p className="text-[8px] font-black uppercase text-rose-400 tracking-widest mb-1">Egresos Totales</p>
+            <h3 className="text-2xl font-black text-[#1A1A2E] tracking-tighter">${totalEgresos.toLocaleString('es-CL')}</h3>
           </div>
-          <button 
-            type="submit"
-            disabled={loading}
-            className="px-12 bg-[#1A1A2E] text-white font-black uppercase tracking-[0.2em] text-[10px] rounded-4xl hover:bg-[#FF8FAB] hover:text-[#1A1A2E] transition-all shadow-xl disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="animate-spin" size={24} /> : 'Sincronizar Datos'}
-          </button>
-        </form>
+        )}
       </header>
 
-      {error && (
-        <div className="bg-rose-50 p-6 rounded-4xl border border-rose-100 flex items-center gap-4 text-rose-600 shadow-sm animate-in zoom-in-95">
-          <AlertTriangle size={24} />
-          <p className="text-xs font-black uppercase tracking-widest">{error}</p>
+      {errorMsg && (
+        <div className="bg-rose-50 border border-rose-100 p-6 rounded-3xl flex items-center gap-4 text-rose-600 shadow-sm animate-in zoom-in-95">
+          <AlertCircle size={24} />
+          <p className="text-xs font-black uppercase tracking-widest">{errorMsg}</p>
         </div>
       )}
 
-      {!loading && cuotasAlumno.length > 0 && (
-        <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-          
-          {resumen && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm flex flex-col justify-center border-b-4 border-emerald-400">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Monto Pagado</p>
-                <h3 className="text-3xl font-black text-[#1A1A2E] tracking-tighter">
-                  ${(resumen.totalPagado || resumen.TOTAL_PAGADO || 0).toLocaleString('es-CL')}
-                </h3>
-              </div>
-              <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm flex flex-col justify-center border-b-4 border-rose-400">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Deuda Pendiente</p>
-                <h3 className="text-3xl font-black text-rose-600 tracking-tighter">
-                  ${(resumen.totalPendiente || resumen.TOTAL_PENDIENTE || 0).toLocaleString('es-CL')}
-                </h3>
-              </div>
-              <div className="bg-[#1A1A2E] p-8 rounded-[2.5rem] shadow-xl flex flex-col justify-center relative overflow-hidden">
-                <p className="text-[9px] font-black text-[#FF8FAB] uppercase tracking-widest mb-1 z-10">Progreso Financiero</p>
-                <h3 className="text-3xl font-black text-white z-10">
-                  {(resumen.porcentajePagado || resumen.PORCENTAJE_PAGADO || 0).toFixed(1)}%
-                </h3>
-                <Receipt size={80} className="absolute -right-4 -bottom-4 text-white/5 rotate-12" />
-              </div>
-            </div>
-          )}
-
-          <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden p-2">
-            <div className="overflow-x-auto no-scrollbar">
-              <table className="w-full text-left border-collapse min-w-225">
-                <thead>
-                  <tr className="bg-slate-50/50">
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Concepto de Cobro</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Fecha Vto.</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] text-right">Original</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] text-right">Monto Pagado</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] text-center">Estatus Oracle</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] text-center">Recordatorio</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {cuotasAlumno.map((c: any, i: number) => {
-                    const status = c.ESTADO || c.estado;
-                    const esVencido = new Date(c.FECHA_VENCIMIENTO || c.fecha_vencimiento) < new Date() && status !== 'PAGADO';
-                    
-                    return (
-                      <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
-                        <td className="px-8 py-6">
-                          <p className="text-sm font-black text-[#1A1A2E] uppercase">{c.concepto?.NOMBRE || c.DESCRIPCION || c.descripcion}</p>
-                          <p className="text-[9px] font-bold text-[#FF8FAB] uppercase mt-1 tracking-widest italic">
-                            Cuota {c.NUMERO_CUOTA || c.numero_cuota}/{c.TOTAL_CUOTAS || c.total_cuotas}
-                          </p>
-                        </td>
-                        <td className="px-8 py-6">
-                          <p className={`text-xs font-bold ${esVencido ? 'text-rose-500' : 'text-slate-500'}`}>
-                            {new Date(c.FECHA_VENCIMIENTO || c.fecha_vencimiento).toLocaleDateString('es-CL')}
-                          </p>
-                        </td>
-                        <td className="px-8 py-6 text-right">
-                          <p className="text-sm font-black text-[#1A1A2E]">${(c.MONTO_ORIGINAL || c.monto_original).toLocaleString('es-CL')}</p>
-                        </td>
-                        <td className="px-8 py-6 text-right">
-                          <p className={`text-sm font-black ${Number(c.MONTO_PAGADO || c.monto_pagado) > 0 ? 'text-emerald-500' : 'text-slate-300'}`}>
-                            ${(c.MONTO_PAGADO || c.monto_pagado || 0).toLocaleString('es-CL')}
-                          </p>
-                        </td>
-                        <td className="px-8 py-6 text-center">
-                          <span className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border ${
-                            status === 'PAGADO' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                            status === 'EXENTO' ? 'bg-amber-50 text-amber-600 border-amber-100' : 
-                            'bg-rose-50 text-rose-600 border-rose-100'
-                          }`}>
-                            {status === 'PAGADO' ? <CheckCircle2 size={12}/> : <Clock size={12}/>}
-                            {status}
-                          </span>
-                        </td>
-                        <td className="px-8 py-6 text-center">
-                          <button className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-[#1A1A2E] hover:text-[#FF8FAB] transition-all border border-slate-100 shadow-sm">
-                            <Mail size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        {/* GRÁFICO DE ANILLO */}
+        <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center h-125 relative overflow-hidden group">
+           <h3 className="font-black text-[#1A1A2E] uppercase text-[10px] tracking-widest mb-8 self-start z-10">Proporción de Egresos</h3>
+           
+           {gastos.length > 0 ? (
+             <div className="w-full h-full relative z-10">
+               <ResponsiveContainer width="100%" height="100%">
+                 <PieChart>
+                   <Pie 
+                     data={gastos} 
+                     dataKey="value" 
+                     innerRadius={90} 
+                     outerRadius={140} 
+                     paddingAngle={5}
+                     animationDuration={1500}
+                     animationBegin={200}
+                   >
+                     {gastos.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} strokeWidth={0} />)}
+                   </Pie>
+                   <Tooltip 
+                     contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', fontWeight:'bold'}} 
+                     formatter={(val: any) => `$${Number(val).toLocaleString('es-CL')}`} 
+                   />
+                 </PieChart>
+               </ResponsiveContainer>
+             </div>
+           ) : (
+             <div className="text-slate-300 text-center flex flex-col items-center z-10">
+               <Filter size={60} className="mb-4 opacity-50 stroke-1"/>
+               <p className="text-[10px] uppercase font-black tracking-[0.2em] text-[#1A1A2E]">Sin datos para graficar</p>
+               <p className="text-xs font-medium text-slate-400 mt-2">No hay egresos registrados en el sistema.</p>
+             </div>
+           )}
         </div>
-      )}
 
-      {/* ESTADO VACÍO */}
-      {!loading && cuotasAlumno.length === 0 && !error && (
-        <div className="bg-white rounded-[4rem] border border-slate-100 p-24 flex flex-col items-center justify-center text-center opacity-40">
-          <div className="bg-slate-50 p-8 rounded-full mb-8 border border-slate-100 shadow-inner">
-            <Search size={64} className="text-slate-300" strokeWidth={1} />
-          </div>
-          <h3 className="text-2xl font-black text-[#1A1A2E] uppercase tracking-tighter italic">Ledger de Alumno Vacío</h3>
-          <p className="text-sm text-slate-500 font-medium max-w-sm mt-4 leading-relaxed">
-            Ingrese el identificador único del estudiante (ID) para sincronizar su historial de pagos desde el nodo principal de Oracle.
-          </p>
+        {/* DETALLE DE ÁREAS */}
+        <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm overflow-y-auto h-125 no-scrollbar relative">
+           <h3 className="font-black text-[#1A1A2E] uppercase text-[10px] tracking-widest mb-8 sticky top-0 bg-white/90 backdrop-blur-sm pb-4 border-b border-slate-50 z-10">
+             Detalle por Área
+           </h3>
+           <div className="space-y-6">
+              {gastos.length > 0 ? gastos.map((g, i) => (
+                <div key={i} className="flex flex-col gap-3 group">
+                  <div className="flex justify-between items-end">
+                    <div className="flex items-center gap-4">
+                      <div className="w-4 h-4 rounded-xl shadow-sm" style={{backgroundColor: COLORS[i % COLORS.length]}}></div>
+                      <p className="text-xs font-black text-slate-500 uppercase tracking-wider">{g.name}</p>
+                    </div>
+                    <div className="text-right">
+                       <p className="text-lg font-black text-[#1A1A2E] tracking-tight">${g.value.toLocaleString('es-CL')}</p>
+                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{g.porcentaje}% del total</p>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${g.porcentaje}%`, backgroundColor: COLORS[i % COLORS.length] }}></div>
+                  </div>
+                </div>
+              )) : (
+                <div className="h-full w-full flex items-center justify-center pt-20">
+                  <p className="text-center text-slate-400 text-xs italic font-medium">Bandeja de egresos limpia.</p>
+                </div>
+              )}
+           </div>
         </div>
-      )}
+
+      </div>
     </div>
   )
 }

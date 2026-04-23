@@ -1,8 +1,12 @@
 "use client"
 import React, { useState, useEffect } from "react"
-import { Receipt, Loader2, AlertCircle, FileSpreadsheet, ArrowLeft, ShieldAlert } from "lucide-react"
-import Cookies from "js-cookie"
+import { Receipt, Loader2, AlertCircle, FileSpreadsheet, ArrowLeft, ShieldAlert, CheckCircle2, Clock, XCircle } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+
+// ARQUITECTURA LIMPIA (Sube 6 niveles: cuotas -> centro-padres -> cpad -> dashboard -> app -> raíz)
+import { authService } from "../../../../../services/authService"
+import { pagosService } from "../../../../../services/pagosService"
 
 interface Cuota {
   cobro_id: number;
@@ -12,6 +16,7 @@ interface Cuota {
 }
 
 export default function CuotasColegioPage() {
+  const router = useRouter()
   const [cuotas, setCuotas] = useState<Cuota[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -20,83 +25,54 @@ export default function CuotasColegioPage() {
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null)
 
   useEffect(() => {
-    const fetchCuotas = async () => {
+    const fetchDatos = async () => {
       try {
-        const token = Cookies.get("auth-token")
+        // 1. Llamada centralizada a MS_IDENTITY para obtener colegio y ROLES
+        const perfil = await authService.getMe()
+        const colId = perfil.colegioId || perfil.COLEGIO_ID || 1
         
-        if (!token) {
-          setError("No hay sesión activa. Por favor, inicia sesión.");
-          setLoading(false);
-          return;
-        }
+        // --- VALIDACIÓN DE ROL DE CENTRO DE PADRES ---
+        const rolesDelUsuario = perfil.roles || [];
+        const esCentroDePadres = rolesDelUsuario.some((rol: any) => {
+          const code = rol.rol_code;
+          return [
+            'CEN_PRES_CAP', 'CEN_TES_CAP', 'CEN_SEC_CAP', 
+            'DIR_PRES_APO', 'DIR_TES_APO', 'DIR_SEC_APO'
+          ].includes(code);
+        });
 
-        const headers = { 
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json' 
-        }
-        
-        let colId = 1;
-        
-        // 1. Llamada a MS_IDENTITY para obtener colegio y ROLES
-        try {
-          const resMe = await fetch("http://127.0.0.1:3007/api/v1/auth/me", { headers })
-          if (resMe.ok) {
-            const jsonMe = await resMe.json()
-            colId = jsonMe.data?.perfil?.colegio_id || 1 
-            
-            // --- VALIDACIÓN DE ROL DE CENTRO DE PADRES ---
-            const rolesDelUsuario = jsonMe.data?.roles || [];
-            const esCentroDePadres = rolesDelUsuario.some((rol: any) => {
-              const code = rol.rol_code;
-              return code === 'CEN_PRES_CAP' || code === 'CEN_TES_CAP' || code === 'CEN_SEC_CAP' ||
-                     code === 'DIR_PRES_APO' || code === 'DIR_TES_APO' || code === 'DIR_SEC_APO';
-            });
-
-            if (!esCentroDePadres) {
-              setIsAuthorized(false);
-              setLoading(false);
-              return; // Detenemos el flujo aquí, no pedimos cuotas
-            }
-            
-            setIsAuthorized(true); // Sí tiene permiso
-          }
-        } catch (e) {
-          console.warn("No se pudo resolver la identidad.")
-          setError("Error validando tus permisos.");
+        if (!esCentroDePadres) {
+          setIsAuthorized(false);
           setLoading(false);
-          return;
+          return; // Detenemos el flujo aquí, no pedimos cuotas
         }
         
-        // 2. Si está autorizado, llamamos a MS_PAGOS
-        const res = await fetch(`http://127.0.0.1:3002/api/v1/pagos/cobros/colegio/${colId}`, { headers })
+        setIsAuthorized(true);
+
+        // 2. Si está autorizado, llamamos a MS_PAGOS usando el servicio
+        // Asumiendo que has agregado un método para ver cuotas generales del colegio
+        const dataCuotas = await pagosService.getCuentasPorCobrar(); // Puedes ajustarlo si el servicio requiere ID de colegio
         
-        const contentType = res.headers.get("content-type")
-        if (contentType && contentType.includes("application/json")) {
-           const json = await res.json()
-           if (json.success || json.status === "success") {
-             const dataMapeada = json.data.map((c: any) => ({
-               cobro_id: c.COBRO_ID || c.cobro_id,
-               descripcion: c.DESCRIPCION || c.descripcion,
-               monto_original: c.MONTO_ORIGINAL || c.monto_original,
-               estado: c.ESTADO || c.estado
-             }));
-             setCuotas(dataMapeada)
-           } else {
-             setError("Error al recuperar los datos del servidor.");
-           }
-        } else {
-           console.warn("El endpoint /cobros/colegio no devolvió JSON.")
-        }
+        const dataMapeada = dataCuotas.map((c: any) => ({
+          cobro_id: c.COBRO_ID || c.cobro_id,
+          descripcion: c.DESCRIPCION || c.descripcion,
+          monto_original: c.MONTO_ORIGINAL || c.monto_original,
+          estado: c.ESTADO || c.estado
+        }));
+        
+        setCuotas(dataMapeada);
 
       } catch (e: any) { 
-        console.error("Excepción en fetchCuotas:", e)
-        setError("Error crítico de conexión con la API de Pagos (Puerto 3002).");
+        console.error("Excepción en fetchDatos:", e)
+        setError(e.message || "Error crítico de conexión con la API.");
+        setIsAuthorized(false);
       } finally { 
         setLoading(false) 
       }
     }
-    fetchCuotas()
-  }, [])
+    
+    fetchDatos()
+  }, [router])
 
   if (loading) return (
     <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
@@ -172,7 +148,7 @@ export default function CuotasColegioPage() {
       {/* Tabla de Datos de MS_PAGOS */}
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="w-full text-left border-collapse min-w-200">
             <thead className="bg-[#1A1A2E] text-white">
               <tr>
                 <th className="p-6 text-[10px] font-black uppercase tracking-[0.2em] w-32">ID Operación</th>

@@ -2,10 +2,14 @@
 import React, { useState, useEffect } from "react"
 import { 
   Receipt, Search, Mail, CheckCircle2, Clock, 
-  AlertTriangle, Loader2, Users, FileText, ShieldAlert, ArrowLeft 
+  AlertTriangle, Loader2, Users, ShieldAlert, ArrowLeft 
 } from "lucide-react"
-import Cookies from "js-cookie"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
+
+// ARQUITECTURA LIMPIA
+import { authService } from "../../../../../services/authService"
+import { pagosService } from "../../../../../services/pagosService"
 
 export default function CuotasTesoreriaPage() {
   const router = useRouter()
@@ -17,32 +21,13 @@ export default function CuotasTesoreriaPage() {
   const [cuotasAlumno, setCuotasAlumno] = useState<any[]>([])
   const [resumen, setResumen] = useState<any>(null)
 
-  const GATEWAY_URL = "http://127.0.0.1:3007/api/v1"
-
-  // 1. EFECTO DE SEGURIDAD: Validar que el usuario sea Tesorero al cargar la página
   useEffect(() => {
     const verifyAuth = async () => {
       try {
-        const token = Cookies.get("auth-token")
-        if (!token) {
-          setIsAuthorized(false)
-          return
-        }
-
-        const res = await fetch(`${GATEWAY_URL}/identity/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        const json = await res.json()
-
-        if (json.status === "success") {
-          const roles = json.data?.roles || []
-          const esTesorero = roles.some((r: any) => 
-            ['CEN_TES_CAP', 'DIR_TES_APO', 'CEN_TES_CAL', 'DIR_TES_ALU'].includes(r.rol_code)
-          )
-          setIsAuthorized(esTesorero)
-        } else {
-          setIsAuthorized(false)
-        }
+        const perfil = await authService.getMe()
+        const rolesTesoreria = ['CEN_TES_CAP', 'DIR_TES_APO', 'CEN_TES_CAL', 'DIR_TES_ALU']
+        const esTesorero = perfil.roles?.some((r: any) => rolesTesoreria.includes(r.rol_code))
+        setIsAuthorized(!!esTesorero)
       } catch (e) {
         setIsAuthorized(false)
       } finally {
@@ -52,7 +37,6 @@ export default function CuotasTesoreriaPage() {
     verifyAuth()
   }, [])
 
-  // 2. FUNCIÓN DE BÚSQUEDA REAL EN MS_PAGOS
   const handleBuscarCobros = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!busquedaId.trim()) return
@@ -63,61 +47,36 @@ export default function CuotasTesoreriaPage() {
     setResumen(null)
 
     try {
-      const token = Cookies.get("auth-token")
-      const headers = { 
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      }
+      // 1. Obtener Detalle desde el Servicio
+      const dataCobros = await pagosService.getDetalleCuotasAlumno(busquedaId)
+      setCuotasAlumno(dataCobros)
 
-      // Consulta detalle de cobros (Oracle: PAG_CUENTAS_COBRAR)
-      const resCobros = await fetch(`${GATEWAY_URL}/pagos/cuotas/alumno/${busquedaId}`, { headers })
-      
-      // Consulta resumen (Sumatorias de Oracle)
-      const resResumen = await fetch(`${GATEWAY_URL}/pagos/cuotas/alumno/${busquedaId}/resumen`, { headers })
+      // 2. Obtener Resumen desde el Servicio
+      const dataResumen = await pagosService.getResumenCuotasAlumno(busquedaId)
+      setResumen(dataResumen)
 
-      const contentTypeC = resCobros.headers.get("content-type")
-      const contentTypeR = resResumen.headers.get("content-type")
-
-      if (contentTypeC?.includes("application/json") && contentTypeR?.includes("application/json")) {
-        const jsonCobros = await resCobros.json()
-        const jsonResumen = await resResumen.json()
-
-        if (jsonCobros.success && Array.isArray(jsonCobros.data)) {
-          setCuotasAlumno(jsonCobros.data)
-        } else {
-          throw new Error("No hay deudas registradas para este alumno.")
-        }
-
-        if (jsonResumen.success) {
-          setResumen(jsonResumen.data)
-        }
-      } else {
-        throw new Error("El servidor de pagos no respondió correctamente (Error HTML).")
-      }
     } catch (err: any) {
-      setError(err.message || "Error al conectar con Oracle DB.")
+      setError(err.message || "No se encontraron deudas para este ID.")
     } finally {
       setLoading(false)
     }
   }
 
-  // Pantalla de Carga de Seguridad
   if (authLoading) return (
     <div className="flex h-[80vh] flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-[#FF8FAB]" size={48} strokeWidth={1.5} />
-      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Verificando Credenciales de Tesorería...</p>
+      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Verificando Credenciales...</p>
     </div>
   )
 
-  // Pantalla de Bloqueo
   if (isAuthorized === false) return (
     <div className="flex h-[80vh] items-center justify-center p-6 text-center">
-      <div className="max-w-xl p-12 bg-white rounded-[3rem] border border-red-100 shadow-xl shadow-red-500/5">
+      <div className="max-w-xl p-12 bg-white rounded-[3rem] border border-red-100 shadow-xl">
         <ShieldAlert size={60} className="text-red-500 mx-auto mb-6" strokeWidth={1} />
-        <h2 className="text-2xl font-black text-[#1A1A2E] mb-2 uppercase tracking-tighter italic">Acceso Restringido</h2>
-        <p className="text-slate-500 text-sm mb-10 max-w-sm mx-auto">Esta herramienta de búsqueda de deudores es solo para la Directiva de Finanzas.</p>
-        <button onClick={() => router.push('/login')} className="bg-[#1A1A2E] text-white px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 mx-auto">
-          <ArrowLeft size={16} /> Ir al Login
+        <h2 className="text-2xl font-black text-[#1A1A2E] mb-2 uppercase tracking-tighter">Acceso Denegado</h2>
+        <p className="text-slate-500 text-sm mb-10">Solo personal de Tesorería puede auditar cobros individuales.</p>
+        <button onClick={() => router.push('/dashboard/cpad/tesorero-cpad')} className="bg-[#1A1A2E] text-white px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-all hover:bg-slate-800">
+          <ArrowLeft size={16} /> Volver al Panel
         </button>
       </div>
     </div>
@@ -128,17 +87,15 @@ export default function CuotasTesoreriaPage() {
       
       {/* HEADER DE BÚSQUEDA */}
       <header className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
-          <div className="flex items-center gap-6">
-            <div className="bg-[#1A1A2E] p-5 rounded-2xl text-[#FF8FAB] shadow-xl shadow-slate-900/10">
-              <Users size={32} strokeWidth={1.5} />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black text-[#1A1A2E] uppercase tracking-tighter leading-none italic">Cobros Individuales</h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Sincronizado con Oracle Database
-              </p>
-            </div>
+        <div className="flex items-center gap-6 mb-10">
+          <div className="bg-[#1A1A2E] p-5 rounded-2xl text-[#FF8FAB] shadow-xl">
+            <Users size={32} strokeWidth={1.5} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black text-[#1A1A2E] uppercase tracking-tighter leading-none italic">Cobros Individuales</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Sincronizado con Oracle Ledger
+            </p>
           </div>
         </div>
 
@@ -147,8 +104,8 @@ export default function CuotasTesoreriaPage() {
             <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#FF8FAB] transition-colors" size={20} />
             <input 
               type="number" 
-              placeholder="Ingrese el ID del Estudiante (Ej: 4 o 5)"
-              className="w-full pl-14 pr-6 py-6 bg-slate-50 border-none rounded-4xl text-sm font-black focus:ring-4 focus:ring-[#FF8FAB]/20 outline-none transition-all placeholder:font-medium text-[#1A1A2E]"
+              placeholder="Ingrese ID del Estudiante..."
+              className="w-full pl-14 pr-6 py-6 bg-slate-50 border-none rounded-4xl text-sm font-black focus:ring-4 focus:ring-[#FF8FAB]/20 outline-none transition-all text-[#1A1A2E]"
               value={busquedaId}
               onChange={(e) => setBusquedaId(e.target.value)}
               required
@@ -157,9 +114,9 @@ export default function CuotasTesoreriaPage() {
           <button 
             type="submit"
             disabled={loading}
-            className="px-12 bg-[#1A1A2E] text-white font-black uppercase tracking-[0.2em] text-[10px] rounded-4xl hover:bg-[#FF8FAB] hover:text-[#1A1A2E] transition-all shadow-xl shadow-slate-900/10 disabled:opacity-50"
+            className="px-12 bg-[#1A1A2E] text-white font-black uppercase tracking-[0.2em] text-[10px] rounded-4xl hover:bg-[#FF8FAB] hover:text-[#1A1A2E] transition-all shadow-xl disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin" size={24} /> : 'Ejecutar Búsqueda'}
+            {loading ? <Loader2 className="animate-spin" size={24} /> : 'Ejecutar Auditoría'}
           </button>
         </form>
       </header>
@@ -176,17 +133,11 @@ export default function CuotasTesoreriaPage() {
           
           {resumen && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-center border-b-4">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Monto Pagado</p>
-                <h3 className="text-3xl font-black text-[#1A1A2E] tracking-tighter">${resumen.totalPagado?.toLocaleString('es-CL')}</h3>
-              </div>
-              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-center border-b-4">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Deuda Pendiente</p>
-                <h3 className="text-3xl font-black text-rose-600 tracking-tighter">${resumen.totalPendiente?.toLocaleString('es-CL')}</h3>
-              </div>
+              <ResumenCard title="Monto Pagado" value={resumen.totalPagado} color="text-emerald-500" />
+              <ResumenCard title="Deuda Pendiente" value={resumen.totalPendiente} color="text-rose-600" />
               <div className="bg-[#1A1A2E] p-8 rounded-[2.5rem] shadow-xl flex flex-col justify-center relative overflow-hidden">
-                <p className="text-[9px] font-black text-[#FF8FAB] uppercase tracking-widest mb-1 z-10">Tasa de Cumplimiento</p>
-                <h3 className="text-3xl font-black text-white z-10">{resumen.porcentajePagado?.toFixed(1)}%</h3>
+                <p className="text-[9px] font-black text-[#FF8FAB] uppercase tracking-widest mb-1 z-10">Cumplimiento</p>
+                <h3 className="text-3xl font-black text-white z-10">{Number(resumen.porcentajePagado || 0).toFixed(1)}%</h3>
                 <Receipt size={80} className="absolute -right-4 -bottom-4 text-white/5 rotate-12" />
               </div>
             </div>
@@ -197,23 +148,24 @@ export default function CuotasTesoreriaPage() {
               <table className="w-full text-left border-collapse min-w-225">
                 <thead>
                   <tr className="bg-slate-50/50">
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Concepto Contable</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Fecha Vto.</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] text-right">Original</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] text-right">Pagado</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] text-center">Estado</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] text-center">Gestión</th>
+                    <th className="px-8 py-6 text-[9px] font-black uppercase text-slate-400 tracking-[0.2em]">Concepto</th>
+                    <th className="px-8 py-6 text-[9px] font-black uppercase text-slate-400 tracking-[0.2em]">Vencimiento</th>
+                    <th className="px-8 py-6 text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] text-right">Monto</th>
+                    <th className="px-8 py-6 text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] text-right">Pagado</th>
+                    <th className="px-8 py-6 text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] text-center">Estado</th>
+                    <th className="px-8 py-6 text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] text-center">Notificar</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {cuotasAlumno.map((c: any, i: number) => {
-                    const esVencido = new Date(c.FECHA_VENCIMIENTO || c.fecha_vencimiento) < new Date() && c.ESTADO !== 'PAGADO'
+                    const estado = (c.ESTADO || c.estado || 'PENDIENTE').toUpperCase()
+                    const esVencido = new Date(c.FECHA_VENCIMIENTO || c.fecha_vencimiento) < new Date() && estado !== 'PAGADO'
                     
                     return (
                       <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-8 py-6">
                           <p className="text-sm font-black text-[#1A1A2E]">{c.DESCRIPCION || c.descripcion}</p>
-                          <p className="text-[9px] font-bold text-[#FF8FAB] uppercase mt-1 tracking-widest italic">Cuota {c.NUMERO_CUOTA || c.numero_cuota}/{c.TOTAL_CUOTAS || c.total_cuotas}</p>
+                          <p className="text-[9px] font-bold text-[#FF8FAB] uppercase mt-1 tracking-widest italic">Item #{c.COBRO_ID || c.cobro_id}</p>
                         </td>
                         <td className="px-8 py-6">
                           <p className={`text-xs font-bold ${esVencido ? 'text-rose-500' : 'text-slate-500'}`}>
@@ -221,26 +173,26 @@ export default function CuotasTesoreriaPage() {
                           </p>
                         </td>
                         <td className="px-8 py-6 text-right">
-                          <p className="text-sm font-black text-[#1A1A2E]">${(c.MONTO_ORIGINAL || c.monto_original).toLocaleString('es-CL')}</p>
+                          <p className="text-sm font-black text-[#1A1A2E]">${Number(c.MONTO_ORIGINAL || c.monto_original || 0).toLocaleString('es-CL')}</p>
                         </td>
                         <td className="px-8 py-6 text-right">
                           <p className={`text-sm font-black ${Number(c.MONTO_PAGADO || c.monto_pagado) > 0 ? 'text-emerald-500' : 'text-slate-300'}`}>
-                            ${(c.MONTO_PAGADO || c.monto_pagado || 0).toLocaleString('es-CL')}
+                            ${Number(c.MONTO_PAGADO || c.monto_pagado || 0).toLocaleString('es-CL')}
                           </p>
                         </td>
                         <td className="px-8 py-6 text-center">
-                          <span className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border ${
-                            (c.ESTADO || c.estado) === 'PAGADO' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                            (c.ESTADO || c.estado) === 'EXENTO' ? 'bg-amber-50 text-amber-600 border-amber-100' : 
+                          <span className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[8px] font-black uppercase tracking-widest border ${
+                            estado === 'PAGADO' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                            estado === 'EXENTO' ? 'bg-amber-50 text-amber-600 border-amber-100' : 
                             'bg-rose-50 text-rose-600 border-rose-100'
                           }`}>
-                            {(c.ESTADO || c.estado) === 'PAGADO' ? <CheckCircle2 size={12}/> : <Clock size={12}/>}
-                            {c.ESTADO || c.estado}
+                            {estado === 'PAGADO' ? <CheckCircle2 size={10}/> : <Clock size={10}/>}
+                            {estado}
                           </span>
                         </td>
                         <td className="px-8 py-6 text-center">
-                          <button className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-[#1A1A2E] hover:text-[#FF8FAB] transition-all border border-slate-100 shadow-sm">
-                            <Mail size={18} />
+                          <button className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-[#1A1A2E] hover:text-[#FF8FAB] transition-all border border-slate-100">
+                            <Mail size={16} />
                           </button>
                         </td>
                       </tr>
@@ -255,16 +207,23 @@ export default function CuotasTesoreriaPage() {
 
       {/* ESTADO VACÍO */}
       {!loading && cuotasAlumno.length === 0 && !error && (
-        <div className="bg-white rounded-[4rem] border border-slate-100 p-20 flex flex-col items-center justify-center text-center opacity-40">
-          <div className="bg-slate-50 p-8 rounded-full mb-8 border border-slate-100 shadow-inner">
-            <Search size={64} className="text-slate-300" strokeWidth={1} />
-          </div>
-          <h3 className="text-2xl font-black text-[#1A1A2E] uppercase tracking-tighter italic">Ledger de Pagos Vacío</h3>
-          <p className="text-sm text-slate-500 font-medium max-w-sm mt-4 leading-relaxed">
-            Ingrese el número de identificación del estudiante para sincronizar sus deudas y pagos desde el nodo principal.
+        <div className="bg-white rounded-[4rem] border border-slate-100 p-24 flex flex-col items-center justify-center text-center opacity-40">
+          <Search size={64} className="text-slate-300 mb-6" strokeWidth={1} />
+          <h3 className="text-xl font-black text-[#1A1A2E] uppercase tracking-tighter">Buscador de Cartera</h3>
+          <p className="text-xs text-slate-500 font-medium max-w-xs mt-4 leading-relaxed">
+            Sincronice deudas y pagos individuales desde el microservicio central ingresando el ID del alumno.
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+function ResumenCard({ title, value, color }: any) {
+  return (
+    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-center">
+      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
+      <h3 className={`text-3xl font-black ${color} tracking-tighter`}>${Number(value || 0).toLocaleString('es-CL')}</h3>
     </div>
   )
 }

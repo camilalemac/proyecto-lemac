@@ -1,11 +1,16 @@
 "use client"
 import { FileText, ExternalLink, ShieldCheck, Download, AlertCircle, Loader2 } from "lucide-react"
 
+// Ajustamos la interfaz para que acepte tanto mayúsculas (Oracle puro) como minúsculas
 interface Reporte {
-  DOCUMENTO_ID: number;
-  TITULO: string;
+  DOCUMENTO_ID?: number;
+  documento_id?: number;
+  TITULO?: string;
+  titulo?: string;
   DESCRIPCION?: string;
-  URL_ARCHIVO: string;
+  descripcion?: string;
+  URL_ARCHIVO?: string;
+  url_archivo?: string;
 }
 
 export default function ArchivoReportes({ 
@@ -23,7 +28,7 @@ export default function ArchivoReportes({
     return (
       <div className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100 flex flex-col items-center justify-center min-h-75">
         <Loader2 size={40} className="animate-spin text-[#FF8FAB] mb-4" />
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Consultando Microservicio 3005...</p>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Consultando Ledger de Reportes...</p>
       </div>
     );
   }
@@ -49,16 +54,16 @@ export default function ArchivoReportes({
         )}
       </div>
 
-      {/* MANEJO DE ERRORES DE MICROSERVICIO (Reflejando el error 3005 de tu consola) */}
+      {/* MANEJO DE ERRORES */}
       {error ? (
-        <div className="flex flex-col items-center justify-center py-12 bg-red-50 rounded-[2.5rem] border-2 border-dashed border-red-100">
-          <AlertCircle className="text-red-400 mb-2" size={40} />
-          <p className="text-[10px] font-black text-red-400 uppercase tracking-widest text-center px-6">
-            Error: El microservicio de documentos (Puerto 3005) no responde
+        <div className="flex flex-col items-center justify-center py-12 bg-rose-50 rounded-[2.5rem] border-2 border-dashed border-rose-100">
+          <AlertCircle className="text-rose-400 mb-2" size={40} />
+          <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest text-center px-6">
+            {error}
           </p>
           <button 
             onClick={() => window.location.reload()}
-            className="mt-4 text-[9px] font-black text-white bg-red-400 px-4 py-2 rounded-xl uppercase tracking-tighter hover:bg-red-500 transition-colors"
+            className="mt-4 text-[9px] font-black text-white bg-rose-400 px-4 py-2 rounded-xl uppercase tracking-tighter hover:bg-rose-500 transition-colors"
           >
             Reintentar Conexión
           </button>
@@ -67,46 +72,58 @@ export default function ArchivoReportes({
         <div className="space-y-4">
           {reportes.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200">
-              <FileText className="text-slate-200 mb-2" size={40} />
+              <FileText className="text-slate-300 mb-2" size={40} />
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay reportes en la base de datos</p>
             </div>
           ) : (
-            reportes.map((rep) => (
-              <div 
-                key={rep.DOCUMENTO_ID} 
-                className="group flex justify-between items-center p-6 bg-white border border-slate-50 rounded-[2.5rem] hover:border-[#FF8FAB]/30 hover:shadow-xl hover:shadow-pink-500/5 transition-all duration-300"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-slate-50 p-4 rounded-2xl text-slate-400 group-hover:text-white group-hover:bg-[#0F172A] transition-all duration-300 shadow-sm">
-                    <FileText size={22} />
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-black text-[#0F172A] uppercase tracking-tight group-hover:text-[#FF8FAB] transition-colors">
-                      {rep.TITULO}
-                    </p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
-                      {rep.DESCRIPCION || "Verificado por auditoría interna"}
-                    </p>
-                  </div>
-                </div>
+            reportes.map((rep, idx) => {
+              // Mapeo seguro contra el Case Sensitivity de Oracle
+              const id = rep.DOCUMENTO_ID || rep.documento_id || idx;
+              const titulo = rep.TITULO || rep.titulo || "Reporte sin título";
+              const descripcion = rep.DESCRIPCION || rep.descripcion || "Verificado por auditoría interna";
+              const url = rep.URL_ARCHIVO || rep.url_archivo || "#";
 
-                <div className="flex items-center gap-2">
-                  <a 
-                    href={rep.URL_ARCHIVO} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="p-3 bg-slate-50 text-slate-400 hover:bg-[#0F172A] hover:text-white rounded-2xl transition-all"
-                  >
-                    <ExternalLink size={18} />
-                  </a>
-                  <button 
-                    className="p-3 bg-slate-50 text-slate-400 hover:bg-[#FF8FAB] hover:text-white rounded-2xl transition-all shadow-sm"
-                  >
-                    <Download size={18} />
-                  </button>
+              return (
+                <div 
+                  key={id} 
+                  className="group flex justify-between items-center p-6 bg-white border border-slate-50 rounded-[2.5rem] hover:border-[#FF8FAB]/30 hover:shadow-xl hover:shadow-pink-500/5 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="bg-slate-50 p-4 rounded-2xl text-slate-400 group-hover:text-white group-hover:bg-[#0F172A] transition-all duration-300 shadow-sm shrink-0">
+                      <FileText size={22} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black text-[#0F172A] uppercase tracking-tight group-hover:text-[#FF8FAB] transition-colors line-clamp-1">
+                        {titulo}
+                      </p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 line-clamp-1">
+                        {descripcion}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {url !== "#" && (
+                      <a 
+                        href={url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-3 bg-slate-50 text-slate-400 hover:bg-[#0F172A] hover:text-white rounded-2xl transition-all"
+                        title="Abrir Documento"
+                      >
+                        <ExternalLink size={18} />
+                      </a>
+                    )}
+                    <button 
+                      className="p-3 bg-slate-50 text-slate-400 hover:bg-[#FF8FAB] hover:text-white rounded-2xl transition-all shadow-sm"
+                      title="Descargar"
+                    >
+                      <Download size={18} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       )}

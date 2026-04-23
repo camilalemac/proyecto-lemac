@@ -1,8 +1,13 @@
 "use client"
 import { useState, useEffect } from "react"
-import { PieChart, BarChart, Wallet, Loader2, Tag, AlertCircle, TrendingDown } from "lucide-react"
+import { PieChart as PieIcon, BarChart, Wallet, Loader2, Tag, AlertCircle, TrendingDown, ArrowLeft } from "lucide-react"
 import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
+
+// ARQUITECTURA LIMPIA (6 niveles hacia arriba para llegar a la raíz)
+import { pagosService } from "../../../../../services/pagosService";
+import { formatCurrencyCLP } from "../../../../../utils/formatters";
 
 export default function GastosPorCategoriaPage() {
   const router = useRouter()
@@ -11,83 +16,49 @@ export default function GastosPorCategoriaPage() {
   const [totalGeneral, setTotalGeneral] = useState(0)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  const GATEWAY_URL = "http://127.0.0.1:3007/api/v1";
-
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchGastosReal = async () => {
       try {
         const token = Cookies.get("auth-token")
-        if (!token) {
-          router.push("/login")
-          return
-        }
+        if (!token) { router.push("/login"); return; }
 
-        const headers = { 
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
+        // 1. Obtener movimientos reales de la cuenta corporativa (ID 1)
+        // Esto consulta la tabla MS_PAGOS.PAG_MOVIMIENTOS_CAJA
+        const movimientos = await pagosService.getMovimientosByCuenta(1)
 
-        // 1. Obtener Colegio ID desde Identidad
-        const resMe = await fetch(`${GATEWAY_URL}/identity/me`, { headers })
-        const dataMe = await resMe.json()
-        if (dataMe.status !== "success") throw new Error("Error de validación de identidad.")
+        // 2. Filtrar solo los EGRESOS (Gastos realizados)
+        const egresos = movimientos.filter((m: any) => m.TIPO_MOVIMIENTO === 'EGRESO')
+        const total = egresos.reduce((acc, m) => acc + Number(m.MONTO || 0), 0)
+        setTotalGeneral(total)
+
+        // 3. Agrupación dinámica por nombre de categoría
+        const agrupado: Record<string, any> = {}
         
-        const colId = dataMe.data.perfil.colegio_id || 1
-
-        // 2. Intentar obtener Categorías y Movimientos en paralelo
-        const [resCats, resMov] = await Promise.all([
-          fetch(`${GATEWAY_URL}/pagos/categorias`, { headers }),
-          fetch(`${GATEWAY_URL}/pagos/movimientos-caja/cuenta/1`, { headers })
-        ])
-
-        // Validación lógica de la respuesta del Backend
-        if (!resMov.ok) {
-          if (resMov.status === 403) {
-            throw new Error("El microservicio de pagos restringe el acceso a este rol (Error 403). Contacte al administrador del backend.");
+        egresos.forEach((m: any) => {
+          const nombreCat = m.CATEGORIA_NOMBRE || "Sin Categoría"
+          if (!agrupado[nombreCat]) {
+            agrupado[nombreCat] = { nombre: nombreCat, monto: 0 }
           }
-          if (resMov.status === 404) throw new Error("No se encontraron registros de egresos en la base de datos.");
-          throw new Error(`Error de servidor (${resMov.status})`);
-        }
+          agrupado[nombreCat].monto += Number(m.MONTO || 0)
+        })
 
-        const dataCats = await resCats.json()
-        const dataMov = await resMov.json()
+        // 4. Convertir a array y calcular porcentajes
+        const desgloseFinal = Object.values(agrupado).map((cat: any) => ({
+          ...cat,
+          porcentaje: total > 0 ? (cat.monto / total) * 100 : 0
+        }))
 
-        if (dataCats.success && dataMov.success) {
-          const categorias = dataCats.data
-          const movimientos = dataMov.data
+        setDatosGastos(desgloseFinal.sort((a, b) => b.monto - a.monto))
 
-          // Filtrar solo EGRESOS (Gastos reales en Oracle)
-          const egresos = movimientos.filter((m: any) => m.TIPO_MOVIMIENTO === 'EGRESO')
-          const total = egresos.reduce((acc: number, m: any) => acc + Number(m.MONTO || 0), 0)
-          setTotalGeneral(total)
-
-          // Agrupación lógica por ID de categoría
-          const desglose = categorias.map((cat: any) => {
-            const montoCat = egresos
-              .filter((m: any) => Number(m.CATEGORIA_ID) === Number(cat.CATEGORIA_ID))
-              .reduce((acc: number, m: any) => acc + Number(m.MONTO || 0), 0)
-
-            return {
-              id: cat.CATEGORIA_ID,
-              nombre: cat.NOMBRE,
-              monto: montoCat,
-              porcentaje: total > 0 ? (montoCat / total) * 100 : 0
-            }
-          })
-
-          // Ordenar y limpiar categorías vacías
-          // Corregido el tipado (a: any, b: any) para evitar errores de VS Code
-          setDatosGastos(desglose.filter((d: any) => d.monto > 0).sort((a: any, b: any) => b.monto - a.monto))
-        }
       } catch (err: any) {
-        console.error("Error cargando gastos CEAL:", err)
-        setErrorMsg(err.message)
+        console.error("Error cargando desglose de gastos:", err)
+        setErrorMsg(err.message || "Error al sincronizar con el nodo de pagos.")
       } finally {
         setLoading(false)
       }
     }
 
-    fetchData()
+    fetchGastosReal()
   }, [router])
 
   if (loading) return (
@@ -98,40 +69,32 @@ export default function GastosPorCategoriaPage() {
   )
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700">
+    <div className="space-y-10 animate-in fade-in duration-700 pb-20">
       
-      {/* HEADER DINÁMICO */}
+      <Link href="/dashboard/alumno/ceal-presidente" className="flex items-center gap-2 text-slate-400 hover:text-[#1A1A2E] transition-all font-black text-[10px] uppercase tracking-widest w-fit group">
+        <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> Volver al Panel
+      </Link>
+
       <header className="bg-white p-12 rounded-[4rem] shadow-sm border border-pink-100 flex flex-col lg:flex-row justify-between items-center gap-8 relative overflow-hidden">
         <div className="flex items-center gap-6 relative z-10 w-full lg:w-auto">
           <div className="bg-[#1A1A2E] p-6 rounded-3xl text-white shadow-2xl">
-            <PieChart size={40} className="text-[#FF8FAB]" />
+            <PieIcon size={40} className="text-[#FF8FAB]" />
           </div>
           <div>
             <h1 className="text-4xl font-black text-[#1A1A2E] uppercase tracking-tighter leading-none italic">Gastos por Áreas</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2 italic">Distribución del Presupuesto Alumnado</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2 italic">Distribución del Presupuesto Institucional</p>
           </div>
         </div>
         <div className="flex items-center gap-3 text-purple-600 bg-purple-50 px-6 py-4 rounded-3xl border border-purple-100 z-10 font-black text-[10px] uppercase tracking-widest">
-          <Tag size={20} className="text-purple-400" /> Auditoría Transparente
+          <Tag size={20} className="text-purple-400" /> Auditoría Transparente Activa
         </div>
       </header>
 
       {errorMsg ? (
         <div className="bg-white p-16 rounded-[4rem] border-2 border-dashed border-rose-100 flex flex-col items-center text-center gap-6">
-          <div className="p-6 bg-rose-50 rounded-full text-rose-500 shadow-inner">
-            <AlertCircle size={48} />
-          </div>
-          <div className="max-w-md">
-            <h3 className="text-xl font-black text-[#1A1A2E] uppercase tracking-tight">Acceso Restringido por Backend</h3>
-            <p className="text-xs font-bold text-slate-400 mt-3 leading-relaxed uppercase">
-              {errorMsg}
-            </p>
-            <div className="mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                Sugerencia técnica: Asegúrese de que el rol <span className="text-[#FF8FAB]">CEN_PRES_CAL</span> esté incluido en la lista de permisos de la ruta <code className="lowercase">/movimientos-caja/cuenta/:id</code> en el microservicio ms-pagos.
-              </p>
-            </div>
-          </div>
+          <AlertCircle size={48} className="text-rose-500" />
+          <h3 className="text-xl font-black text-[#1A1A2E] uppercase tracking-tight">Acceso Restringido</h3>
+          <p className="text-xs font-bold text-slate-400 uppercase max-w-md">{errorMsg}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -139,8 +102,8 @@ export default function GastosPorCategoriaPage() {
           {/* MÉTRICA TOTAL */}
           <div className="lg:col-span-4 space-y-6">
             <div className="bg-[#1A1A2E] p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden group border border-white/5">
-              <p className="text-[10px] font-black text-[#FF8FAB] uppercase tracking-[0.2em] opacity-80">Egreso Total Ejecutado</p>
-              <p className="text-5xl font-black mt-4 tracking-tighter italic">${totalGeneral.toLocaleString('es-CL')}</p>
+              <p className="text-[10px] font-black text-[#FF8FAB] uppercase tracking-[0.2em] opacity-80">Gasto Total Ejecutado</p>
+              <p className="text-5xl font-black mt-4 tracking-tighter italic">{formatCurrencyCLP(totalGeneral)}</p>
               <TrendingDown size={120} className="absolute right-0 bottom-0 -mb-8 -mr-8 text-white/5 group-hover:scale-110 transition-transform" />
             </div>
 
@@ -151,7 +114,7 @@ export default function GastosPorCategoriaPage() {
               <div className="space-y-6">
                 {datosGastos.map((cat, i) => (
                   <div key={i} className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tight">{cat.nombre}</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tight truncate max-w-[70%]">{cat.nombre}</span>
                     <span className="text-sm font-black text-[#1A1A2E]">{Math.round(cat.porcentaje)}%</span>
                   </div>
                 ))}
@@ -168,19 +131,19 @@ export default function GastosPorCategoriaPage() {
                 </h3>
               </div>
               
-              <div className="p-10 space-y-10">
+              <div className="p-10 space-y-10 overflow-y-auto max-h-150 no-scrollbar">
                 {datosGastos.length > 0 ? datosGastos.map((cat, i) => (
                   <div key={i} className="group">
                     <div className="flex justify-between items-end mb-4">
                       <div>
-                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] mb-1">Área Ejecutora</p>
+                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] mb-1">Centro de Costo</p>
                         <h4 className="text-2xl font-black text-[#1A1A2E] group-hover:text-purple-600 transition-colors uppercase tracking-tight italic">{cat.nombre}</h4>
                       </div>
                       <div className="text-right">
-                        <p className="text-3xl font-black text-[#1A1A2E] tracking-tighter">${cat.monto.toLocaleString('es-CL')}</p>
+                        <p className="text-3xl font-black text-[#1A1A2E] tracking-tighter">{formatCurrencyCLP(cat.monto)}</p>
                       </div>
                     </div>
-                    {/* Barra de progreso con el nuevo estilo Tailwind */}
+                    {/* Barra de progreso con gradiente Lemac */}
                     <div className="w-full h-5 bg-slate-50 rounded-full overflow-hidden flex items-center px-1 border border-slate-100 shadow-inner">
                       <div 
                         className="h-2.5 bg-linear-to-r from-[#1A1A2E] via-purple-500 to-[#FF8FAB] rounded-full transition-all duration-1000 ease-out shadow-lg"
@@ -190,8 +153,8 @@ export default function GastosPorCategoriaPage() {
                   </div>
                 )) : (
                   <div className="py-20 text-center flex flex-col items-center opacity-30">
-                    <PieChart size={60} className="mb-4" />
-                    <p className="font-black uppercase tracking-widest text-xs">Sin registros de egresos detectados en la BD</p>
+                    <PieIcon size={60} className="mb-4" />
+                    <p className="font-black uppercase tracking-widest text-xs">Sin registros de egresos detectados</p>
                   </div>
                 )}
               </div>

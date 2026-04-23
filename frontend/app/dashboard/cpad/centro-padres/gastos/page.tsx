@@ -1,8 +1,12 @@
 "use client"
 import React, { useState, useEffect } from "react"
-import { PieChart as ChartIcon, Loader2, TrendingDown, Filter, AlertCircle } from "lucide-react"
-import Cookies from "js-cookie"
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts"
+import { PieChart as ChartIcon, Loader2, TrendingDown, Filter, AlertCircle, ArrowLeft } from "lucide-react"
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
+import Link from "next/link"
+
+// ARQUITECTURA LIMPIA (Sube 6 niveles: gastos -> centro-padres -> cpad -> dashboard -> app -> raíz)
+import { authService } from "../../../../../services/authService"
+import { pagosService } from "../../../../../services/pagosService"
 
 export default function AnalisisGastosPage() {
   const [loading, setLoading] = useState(true)
@@ -13,46 +17,45 @@ export default function AnalisisGastosPage() {
   useEffect(() => {
     const fetchGastos = async () => {
       try {
-        const token = Cookies.get("auth-token")
-        const headers = { 'Authorization': `Bearer ${token}` }
+        // 1. Obtener la identidad del usuario para sacar su colegio_id
+        const perfil = await authService.getMe()
+        const colId = perfil.colegioId || perfil.COLEGIO_ID || 1
+
+        // 2. Obtener los movimientos de ese colegio usando el servicio
+        const data = await pagosService.getMovimientosPorColegio(colId)
+
+        // 3. Filtrar solo los Egresos (Gastos)
+        const egresos = data.filter((m: any) => m.TIPO_MOVIMIENTO === 'EGRESO')
         
-        let colId = 1
-        try {
-          const resMe = await fetch("http://127.0.0.1:3007/api/v1/auth/me", { headers })
-          if (resMe.ok) colId = (await resMe.json()).data?.colegioId || 1
-        } catch (e) {}
+        // 4. Calcular el Total
+        const total = egresos.reduce((acc: number, m: any) => acc + Number(m.MONTO), 0)
+        setTotalEgresos(total)
 
-        const res = await fetch(`http://127.0.0.1:3007/api/v1/pagos/movimientos/colegio/${colId}`, { headers })
-        const contentType = res.headers.get("content-type")
-        
-        if (contentType && contentType.includes("application/json")) {
-           const json = await res.json()
-           if (json.success) {
-              const egresos = (json.data || []).filter((m:any) => m.TIPO_MOVIMIENTO === 'EGRESO')
-              
-              const total = egresos.reduce((acc:number, m:any) => acc + Number(m.MONTO), 0)
-              setTotalEgresos(total)
+        // 5. Agrupar por Categoría
+        const catMap: { [key: string]: number } = {}
+        egresos.forEach((m: any) => {
+          const label = m.CATEGORIA_NOMBRE || `Categoría ${m.CATEGORIA_ID || 'General'}`
+          catMap[label] = (catMap[label] || 0) + Number(m.MONTO)
+        })
 
-              // Agrupar por Categoría
-              const catMap: any = {}
-              egresos.forEach((m:any) => {
-                const label = m.CATEGORIA_NOMBRE || `Categoría ${m.CATEGORIA_ID || 'General'}`
-                catMap[label] = (catMap[label] || 0) + Number(m.MONTO)
-              })
+        // 6. Formatear para Recharts
+        const arrayGastos = Object.keys(catMap).map(k => ({
+          name: k,
+          value: catMap[k],
+          porcentaje: total > 0 ? Math.round((catMap[k] / total) * 100) : 0
+        }))
 
-              const arrayGastos = Object.keys(catMap).map(k => ({
-                name: k,
-                value: catMap[k],
-                porcentaje: total > 0 ? Math.round((catMap[k] / total) * 100) : 0
-              }))
+        // Ordenar de mayor a menor gasto
+        setGastos(arrayGastos.sort((a, b) => b.value - a.value))
 
-              setGastos(arrayGastos.sort((a,b) => b.value - a.value)) // Ordenar de mayor a menor gasto
-           }
-        } else {
-           setErrorMsg("Ruta de movimientos no encontrada en backend.")
-        }
-      } catch (e) { setErrorMsg("Error de conexión.") } finally { setLoading(false) }
+      } catch (e: any) { 
+        console.error("Error cargando análisis de gastos:", e)
+        setErrorMsg(e.message || "Error al conectar con el servidor.") 
+      } finally { 
+        setLoading(false) 
+      }
     }
+    
     fetchGastos()
   }, [])
 
@@ -66,7 +69,19 @@ export default function AnalisisGastosPage() {
   )
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-700">
+      
+      {/* Botón Volver */}
+      <div className="flex items-center">
+        <Link 
+          href="/dashboard/cpad/centro-padres" 
+          className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#1A1A2E] transition-colors bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100 hover:border-[#FF8FAB]/50"
+        >
+          <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+          Volver al Panel
+        </Link>
+      </div>
+
       <header className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 flex justify-between items-center">
         <div className="flex items-center gap-5">
            <div className="p-4 bg-[#1A1A2E] rounded-3xl text-[#FF8FAB] shadow-xl"><ChartIcon size={28} /></div>
@@ -94,7 +109,10 @@ export default function AnalisisGastosPage() {
                  <Pie data={gastos} dataKey="value" innerRadius={90} outerRadius={130} paddingAngle={5}>
                    {gastos.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} strokeWidth={0} />)}
                  </Pie>
-                 <Tooltip contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', fontWeight:'bold'}} formatter={(val) => `$${Number(val).toLocaleString('es-CL')}`} />
+                 <Tooltip 
+                   contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', fontWeight:'bold'}} 
+                   formatter={(val: any) => `$${Number(val).toLocaleString('es-CL')}`}
+                 />
                </PieChart>
              </ResponsiveContainer>
            ) : (
@@ -103,8 +121,10 @@ export default function AnalisisGastosPage() {
         </div>
 
         {/* Detalle de Áreas */}
-        <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm overflow-y-auto max-h-125 custom-scrollbar">
-           <h3 className="font-black text-[#1A1A2E] uppercase text-[10px] tracking-widest mb-8 sticky top-0 bg-white pb-4 border-b border-slate-50 z-10">Detalle por Área</h3>
+        <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm overflow-y-auto h-125 custom-scrollbar">
+           <h3 className="font-black text-[#1A1A2E] uppercase text-[10px] tracking-widest mb-8 sticky top-0 bg-white pb-4 border-b border-slate-50 z-10">
+             Detalle por Área
+           </h3>
            <div className="space-y-6">
               {gastos.length > 0 ? gastos.map((g, i) => (
                 <div key={i} className="flex flex-col gap-2 group">

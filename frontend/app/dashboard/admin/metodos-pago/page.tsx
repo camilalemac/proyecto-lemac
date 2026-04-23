@@ -9,17 +9,20 @@ import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 
+// IMPORTACIONES ARQUITECTURA LIMPIA
+import { pagosService } from "../../../../services/pagosService"
+import { IMetodoPago } from "../../../../types/admin.types"
+
 export default function MetodosPagoPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
   const [conexionBackend, setConexionBackend] = useState(true)
-  const [metodos, setMetodos] = useState<any[]>([])
+  const [metodos, setMetodos] = useState<IMetodoPago[]>([])
   
   const [showModal, setShowModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
 
-  // Formularios alineados con la tabla pag_metodos_pago
   const [formData, setFormData] = useState({
     NOMBRE_METODO: "",
     COMISION_PORCENTAJE: 0,
@@ -59,19 +62,24 @@ export default function MetodosPagoPage() {
     setAuthorized(true)
 
     try {
-      const token = Cookies.get("auth-token")
-      const headers: Record<string, string> = { 'Authorization': `Bearer ${token}` }
+      // ✅ CONSUMO DE BACKEND REAL
+      const data = await pagosService.getMetodos();
       
-      const res = await fetch("http://127.0.0.1:3007/api/v1/pagos/metodos-pago", { headers })
-      
-      if (!res.ok) throw new Error("Error de conexión al Gateway")
-      
-      const data = await res.json()
-      if (data.success) {
-        setMetodos(data.data || [])
-        setConexionBackend(true)
-      }
+      // Mapeo defensivo
+      const mappedMetodos = data.map((m: any) => ({
+        ...m,
+        METODO_ID: m.METODO_ID || m.metodoId,
+        NOMBRE_METODO: m.NOMBRE_METODO || m.nombreMetodo,
+        COMISION_PORCENTAJE: m.COMISION_PORCENTAJE || m.comisionPorcentaje || 0,
+        COMISION_FIJA: m.COMISION_FIJA || m.comisionFija || 0,
+        IMPUESTO_PORCENTAJE: m.IMPUESTO_PORCENTAJE || m.impuestoPorcentaje || 0,
+        ESTADO: m.ESTADO || m.estado || "INACTIVO"
+      }));
+
+      setMetodos(mappedMetodos)
+      setConexionBackend(true)
     } catch (err) {
+      console.error(err);
       setConexionBackend(false)
       setMetodos([]) 
     } finally {
@@ -85,7 +93,6 @@ export default function MetodosPagoPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = Cookies.get("auth-token")
       const payload = {
         NOMBRE_METODO: formData.NOMBRE_METODO,
         COMISION_PORCENTAJE: parseFloat(formData.COMISION_PORCENTAJE.toString()),
@@ -94,13 +101,8 @@ export default function MetodosPagoPage() {
         ESTADO: formData.ESTADO
       }
 
-      const res = await fetch("http://127.0.0.1:3007/api/v1/pagos/metodos", {
-        method: "POST",
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const data = await pagosService.createMetodo(payload);
       
-      const data = await res.json();
       if (data.success) {
         setShowModal(false);
         setFormData({NOMBRE_METODO: "", COMISION_PORCENTAJE: 0, COMISION_FIJA: 0, IMPUESTO_PORCENTAJE: 19.0, ESTADO: "ACTIVO"})
@@ -114,14 +116,14 @@ export default function MetodosPagoPage() {
   }
 
   // ✅ EDITAR MÉTODO (PUT)
-  const openEditModal = (metodo: any) => {
+  const openEditModal = (metodo: IMetodoPago) => {
     setEditData({
-      METODO_ID: metodo.METODO_ID || metodo.metodoId,
-      NOMBRE_METODO: metodo.NOMBRE_METODO || metodo.nombreMetodo || "",
-      COMISION_PORCENTAJE: metodo.COMISION_PORCENTAJE || metodo.comisionPorcentaje || 0,
-      COMISION_FIJA: metodo.COMISION_FIJA || metodo.comisionFija || 0,
-      IMPUESTO_PORCENTAJE: metodo.IMPUESTO_PORCENTAJE || metodo.impuestoPorcentaje || 19,
-      ESTADO: metodo.ESTADO || metodo.estado || "ACTIVO"
+      METODO_ID: metodo.METODO_ID as number,
+      NOMBRE_METODO: metodo.NOMBRE_METODO || "",
+      COMISION_PORCENTAJE: metodo.COMISION_PORCENTAJE || 0,
+      COMISION_FIJA: metodo.COMISION_FIJA || 0,
+      IMPUESTO_PORCENTAJE: metodo.IMPUESTO_PORCENTAJE || 19,
+      ESTADO: metodo.ESTADO || "ACTIVO"
     })
     setShowEditModal(true)
   }
@@ -129,7 +131,6 @@ export default function MetodosPagoPage() {
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = Cookies.get("auth-token")
       const payload = {
         NOMBRE_METODO: editData.NOMBRE_METODO,
         COMISION_PORCENTAJE: parseFloat(editData.COMISION_PORCENTAJE.toString()),
@@ -138,13 +139,8 @@ export default function MetodosPagoPage() {
         ESTADO: editData.ESTADO
       }
 
-      const res = await fetch(`http://127.0.0.1:3007/api/v1/pagos/metodos/${editData.METODO_ID}`, {
-        method: "PUT",
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const data = await pagosService.updateMetodo(editData.METODO_ID, payload);
       
-      const data = await res.json();
       if (data.success) {
         setShowEditModal(false);
         fetchMetodos();
@@ -161,13 +157,7 @@ export default function MetodosPagoPage() {
     if (!window.confirm(`¿Seguro que deseas eliminar/desactivar la pasarela ID ${metodoId}?`)) return;
 
     try {
-      const token = Cookies.get("auth-token")
-      const res = await fetch(`http://127.0.0.1:3007/api/v1/pagos/metodos/${metodoId}`, {
-        method: "DELETE",
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      const data = await res.json();
+      const data = await pagosService.deleteMetodo(metodoId);
       if (data.success) fetchMetodos();
       else alert("Error al eliminar: " + data.message);
     } catch (error) {
@@ -223,42 +213,42 @@ export default function MetodosPagoPage() {
         )}
 
         {metodos.length > 0 ? metodos.map((metodo) => (
-          <div key={metodo.METODO_ID || metodo.metodoId} className="bg-white rounded-[3.5rem] border border-pink-50 shadow-sm hover:shadow-xl transition-all overflow-hidden flex flex-col group">
+          <div key={metodo.METODO_ID} className="bg-white rounded-[3.5rem] border border-pink-50 shadow-sm hover:shadow-xl transition-all overflow-hidden flex flex-col group">
             <div className="p-10 flex-1">
               <div className="flex justify-between items-start mb-6">
                 <div className="bg-pink-50 p-4 rounded-2xl text-[#FF8FAB]">
                   <CreditCard size={28} />
                 </div>
-                <StatusBadge status={metodo.ESTADO || metodo.estado} />
+                <StatusBadge status={metodo.ESTADO || "INACTIVO"} />
               </div>
               
               <h3 className="text-2xl font-black text-[#0F172A] uppercase tracking-tighter mb-6 line-clamp-2">
-                {metodo.NOMBRE_METODO || metodo.nombreMetodo}
+                {metodo.NOMBRE_METODO}
               </h3>
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Percent size={10}/> Comisión %</p>
-                  <p className="text-lg font-black text-[#0F172A]">{metodo.COMISION_PORCENTAJE || metodo.comisionPorcentaje}%</p>
+                  <p className="text-lg font-black text-[#0F172A]">{metodo.COMISION_PORCENTAJE}%</p>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><DollarSign size={10}/> Comisión Fija</p>
-                  <p className="text-lg font-black text-[#0F172A]">${metodo.COMISION_FIJA || metodo.comisionFija}</p>
+                  <p className="text-lg font-black text-[#0F172A]">${metodo.COMISION_FIJA}</p>
                 </div>
                 <div className="col-span-full bg-indigo-50/50 p-4 rounded-2xl border border-indigo-50">
                   <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Receipt size={10}/> Impuesto (IVA)</p>
-                  <p className="text-sm font-black text-indigo-900">{metodo.IMPUESTO_PORCENTAJE || metodo.impuestoPorcentaje}% sobre comisión</p>
+                  <p className="text-sm font-black text-indigo-900">{metodo.IMPUESTO_PORCENTAJE}% sobre comisión</p>
                 </div>
               </div>
             </div>
 
             <div className="bg-slate-50 p-6 flex justify-between items-center border-t border-slate-100">
-               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">ID: {metodo.METODO_ID || metodo.metodoId}</p>
+               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">ID: {metodo.METODO_ID}</p>
                <div className="flex gap-2">
                  <button onClick={() => openEditModal(metodo)} className="p-3 bg-white text-[#0F172A] hover:bg-[#0F172A] hover:text-white rounded-xl transition-all shadow-sm">
                     <Edit3 size={16} />
                  </button>
-                 <button onClick={() => handleDelete(metodo.METODO_ID || metodo.metodoId)} className="p-3 bg-white text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm">
+                 <button onClick={() => handleDelete(metodo.METODO_ID as number)} className="p-3 bg-white text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm">
                     <Trash2 size={16} />
                  </button>
                </div>

@@ -9,12 +9,18 @@ import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 
+// IMPORTACIONES ARQUITECTURA LIMPIA
+import { academicoService } from "../../../../services/academicoService"
+import { IPeriodo } from "../../../../types/admin.types"
+
 export default function GestionPeriodosPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [authorized, setAuthorized] = useState(false) // Estado de seguridad
+  const [authorized, setAuthorized] = useState(false)
   const [conexionBackend, setConexionBackend] = useState(true)
-  const [periodos, setPeriodos] = useState<any[]>([])
+  
+  // Tipado estricto
+  const [periodos, setPeriodos] = useState<IPeriodo[]>([])
   const [showModal, setShowModal] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -24,7 +30,6 @@ export default function GestionPeriodosPage() {
     FECHA_FIN: ""
   })
 
-  // Función para decodificar y validar el rol
   const checkAdminAuth = () => {
     const token = Cookies.get("auth-token")
     if (!token) return false
@@ -33,8 +38,6 @@ export default function GestionPeriodosPage() {
       const base64Url = token.split('.')[1]
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
       const payload = JSON.parse(window.atob(base64))
-      
-      // ✅ BLOQUEO DE SEGURIDAD: Solo SYS_ADMIN puede pasar
       return payload.role === "SYS_ADMIN"
     } catch (e) {
       return false
@@ -42,28 +45,31 @@ export default function GestionPeriodosPage() {
   }
 
   const fetchPeriodos = async () => {
-    // 1. Verificamos autorización antes de cualquier fetch
-    const isAdmnin = checkAdminAuth()
-    if (!isAdmnin) {
-      router.push("/login") // Redirigir si no es admin
+    if (!checkAdminAuth()) {
+      router.push("/login") 
       return
     }
-
     setAuthorized(true)
 
     try {
-      const token = Cookies.get("auth-token")
-      const headers: Record<string, string> = { 'Authorization': `Bearer ${token}` }
+      // ✅ CONSUMO DE BACKEND REAL
+      const rawData = await academicoService.getPeriodos();
       
-      const res = await fetch("http://127.0.0.1:3007/api/v1/academico/periodos", { headers })
-      if (!res.ok) throw new Error("Error de conexión")
-      
-      const json = await res.json()
-      if (json.success) {
-        setPeriodos(json.data || [])
-        setConexionBackend(true)
-      }
+      // Mapeo defensivo
+      const mappedPeriodos = rawData.map((p: any) => ({
+        ...p,
+        PERIODO_ID: p.PERIODO_ID || p.periodoId,
+        ANIO: p.ANIO || p.anio,
+        NOMBRE: p.NOMBRE || p.nombre,
+        FECHA_INICIO: p.FECHA_INICIO || p.fechaInicio,
+        FECHA_FIN: p.FECHA_FIN || p.fechaFin,
+        ESTADO: p.ESTADO || p.estado || "PLANIFICACION"
+      }));
+
+      setPeriodos(mappedPeriodos)
+      setConexionBackend(true)
     } catch (err) {
+      console.error(err);
       setConexionBackend(false)
       setPeriodos([])
     } finally {
@@ -73,22 +79,23 @@ export default function GestionPeriodosPage() {
 
   useEffect(() => { fetchPeriodos() }, [])
 
+  // ✅ CREAR PERIODO (POST)
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = Cookies.get("auth-token")
-      const res = await fetch("http://127.0.0.1:3007/api/v1/academico/periodos", {
-        method: "POST",
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
+      // Formateamos las fechas si están vacías para evitar errores en DB
+      const payload = {
+        ANIO: formData.ANIO,
+        NOMBRE: formData.NOMBRE,
+        FECHA_INICIO: formData.FECHA_INICIO || null,
+        FECHA_FIN: formData.FECHA_FIN || null
+      };
+
+      const data = await academicoService.createPeriodo(payload);
       
-      const data = await res.json();
       if (data.success) {
         setShowModal(false);
+        setFormData({ ANIO: new Date().getFullYear() + 1, NOMBRE: "", FECHA_INICIO: "", FECHA_FIN: "" });
         fetchPeriodos();
       } else {
         alert("Error al crear: " + data.message);
@@ -98,7 +105,6 @@ export default function GestionPeriodosPage() {
     }
   }
 
-  // Mientras verifica o carga, mostramos el spinner para que no haya "flasheo" de la interfaz
   if (loading || !authorized) return (
     <div className="flex h-screen flex-col items-center justify-center bg-[#FDF2F5] gap-4">
       <Loader2 className="animate-spin text-[#0F172A]" size={40} />
@@ -157,10 +163,10 @@ export default function GestionPeriodosPage() {
                 <div className="flex items-center gap-4 mt-2">
                   <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
                     <Clock size={12} /> 
-                    {periodo.FECHA_INICIO ? new Date(periodo.FECHA_INICIO).toLocaleDateString() : 'S/F'} — 
-                    {periodo.FECHA_FIN ? new Date(periodo.FECHA_FIN).toLocaleDateString() : 'S/F'}
+                    {periodo.FECHA_INICIO ? new Date(periodo.FECHA_INICIO).toLocaleDateString('es-CL') : 'S/F'} — 
+                    {periodo.FECHA_FIN ? new Date(periodo.FECHA_FIN).toLocaleDateString('es-CL') : 'S/F'}
                   </div>
-                  <StatusBadge status={periodo.ESTADO} />
+                  <StatusBadge status={periodo.ESTADO || "PLANIFICACION"} />
                 </div>
               </div>
             </div>
@@ -249,7 +255,7 @@ function StatusBadge({ status }: { status: string }) {
       isCerrado ? 'bg-slate-100 text-slate-400' : 'bg-amber-50 text-amber-600 border border-amber-100'
     }`}>
       {isActivo ? <CheckCircle2 size={10} /> : isCerrado ? <XCircle size={10} /> : <Clock size={10} />}
-      {status || 'PENDIENTE'}
+      {s || 'PENDIENTE'}
     </div>
   )
 }

@@ -1,30 +1,30 @@
 "use client"
 import { useEffect, useState } from "react"
 import { ExternalLink, Calendar, FileText, Search } from "lucide-react"
-import Cookies from "js-cookie"
+
+// ARQUITECTURA LIMPIA
+import { reporteService } from "../../../../../services/reporteService"
+import { IReporteDocumento } from "../../../../../types/admin.types"
 
 export default function ListaActas() {
-  const [actas, setActas] = useState<any[]>([]);
+  const [actas, setActas] = useState<IReporteDocumento[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchActas = async () => {
+    const loadActas = async () => {
       try {
-        const token = Cookies.get("auth-token")
+        // Utilizamos el servicio centralizado que ya gestiona el token y los errores
+        const data = await reporteService.getReportes()
         
-        // Conexión directa al microservicio de documentos (ms-pagos/documentos)
-        const res = await fetch("http://127.0.0.1:3005/api/v1/documentos/actas", {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-        
-        const json = await res.json()
-        
-        if (json.success) {
-          setActas(json.data)
-        }
+        // Filtramos para asegurar que solo se muestren actas (opcional, dependiendo de tu BD)
+        // y ordenamos por las más recientes primero.
+        const actasFiltradas = data
+          .filter((doc: IReporteDocumento) => doc.TIPO_DOCUMENTO === 'ACTA_REUNION' || doc.TIPO_DOCUMENTO === 'ACTA')
+          .sort((a: IReporteDocumento, b: IReporteDocumento) => 
+             new Date(b.FECHA_DE_CREACION || "").getTime() - new Date(a.FECHA_DE_CREACION || "").getTime()
+          );
+
+        setActas(actasFiltradas)
       } catch (err) {
         console.error("Error al obtener actas desde el microservicio:", err)
       } finally {
@@ -32,14 +32,13 @@ export default function ListaActas() {
       }
     }
 
-    fetchActas()
+    loadActas()
   }, [])
 
-  // Pantalla de carga con el color Rosa Pastel de tu marca
   if (loading) return (
     <div className="p-20 text-center bg-white rounded-[2.5rem] border border-slate-100">
       <div className="w-10 h-10 border-4 border-[#FF8FAB] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Sincronizando con ms-documentos...</p>
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Sincronizando con ms-reportes...</p>
     </div>
   )
 
@@ -59,7 +58,6 @@ export default function ListaActas() {
               <tr key={acta.DOCUMENTO_ID} className="hover:bg-slate-50/80 transition-all group">
                 <td className="p-8">
                   <div className="flex items-center gap-5">
-                    {/* Contenedor del Icono en Rosa Pastel */}
                     <div className="bg-[#FDF2F5] p-4 rounded-2xl text-[#FF8FAB] group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 shadow-sm">
                       <FileText size={22} />
                     </div>
@@ -88,9 +86,9 @@ export default function ListaActas() {
                     href={acta.URL_ARCHIVO} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2.5 bg-[#0F172A] text-white px-6 py-3 rounded-xl font-black text-[9px] uppercase hover:bg-[#FF8FAB] hover:shadow-lg hover:shadow-pink-100 transition-all active:scale-95 shadow-sm"
+                    className="inline-flex items-center gap-2.5 bg-[#0F172A] text-white px-6 py-3 rounded-xl font-black text-[9px] uppercase hover:bg-[#FF8FAB] hover:text-[#0F172A] hover:shadow-lg hover:shadow-pink-100 transition-all active:scale-95 shadow-sm"
                   >
-                    Ver en Google Drive <ExternalLink size={13} />
+                    Ver Documento <ExternalLink size={13} />
                   </a>
                 </td>
               </tr>

@@ -1,260 +1,162 @@
 "use client"
-import { useState, useEffect } from "react"
-import { ArrowLeft, Loader2, CheckCircle2, Clock, Receipt, Tag, ChevronRight, AlertCircle, ServerOff } from "lucide-react"
+import { useEffect, useState } from "react"
+import { 
+  Receipt, History, Wallet, ChevronRight, 
+  Star, Bell, UserCircle, GraduationCap, Loader2 
+} from "lucide-react"
 import Link from "next/link"
 import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
 
-export default function CuotasPage() {
+// ARQUITECTURA LIMPIA
+import { authService } from "../../../services/authService"
+import { pagosService } from "../../../services/pagosService"
+import { formatCurrencyCLP } from "../../../utils/formatters"
+
+export default function AlumnoDashboardPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('TODAS')
-  const [data, setData] = useState({
-    cobros: [], 
-    totalPendiente: 0,
-    totalPagado: 0
-  })
-  const [conceptosEspeciales, setConceptosEspeciales] = useState<any[]>([])
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  
+  const [usuarioData, setUsuarioData] = useState<any>(null)
+  const [resumen, setResumen] = useState<any>(null)
 
   useEffect(() => {
-    const fetchData = async () => {
+    const loadDashboardData = async () => {
+      const token = Cookies.get("auth-token")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
       try {
-        const token = Cookies.get("auth-token")
-        
-        // 🔒 BLOQUEO DE SEGURIDAD: Redirigir al login si no hay token
-        if (!token) {
-          router.push("/login")
-          return
-        }
+        const [dataDelBackendAuth, cuotasData] = await Promise.all([
+          authService.getMe(),
+          pagosService.getMisCuotasResumen()
+        ])
 
-        const headers = {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-
-        // 1. Petición de Cuotas
-        const resCuotas = await fetch("http://127.0.0.1:3007/api/v1/pagos/cuentas-cobrar/mis-cobros/resumen", { headers });
-        
-        // Validación Anti-Crashes (Verificar si es JSON)
-        const contentTypeCuotas = resCuotas.headers.get("content-type");
-        if (contentTypeCuotas && contentTypeCuotas.includes("application/json")) {
-            const jsonCuotas = await resCuotas.json();
-            if (resCuotas.ok && jsonCuotas.success) {
-                setData({
-                  cobros: jsonCuotas.data?.cobros || [],
-                  totalPendiente: jsonCuotas.data?.totalPendiente || 0,
-                  totalPagado: jsonCuotas.data?.totalPagado || 0
-                })
-            } else {
-                setErrorMsg(jsonCuotas.message || "Error al obtener las cuotas.");
-            }
-        } else {
-            throw new Error("El endpoint /mis-cobros/resumen no existe en el backend (Devolvió HTML).");
-        }
-
-        // 2. Petición de Conceptos Extraordinarios
-        const resConceptos = await fetch("http://127.0.0.1:3007/api/v1/pagos/conceptos", { headers });
-        const contentTypeConceptos = resConceptos.headers.get("content-type");
-        
-        if (contentTypeConceptos && contentTypeConceptos.includes("application/json")) {
-            const jsonConceptos = await resConceptos.json();
-            if (resConceptos.ok && jsonConceptos.success) {
-                const especiales = jsonConceptos.data.filter((c: any) => 
-                  c.TIPO_COBRO === 'EXTRAORDINARIO' || c.MONTO_BASE <= 5000
-                );
-                setConceptosEspeciales(especiales);
-            }
-        }
-
-      } catch (error: any) {
-        console.error("Error detectado en el Frontend:", error.message)
-        setErrorMsg(error.message || "Error de comunicación con el servidor de pagos.");
+        setUsuarioData(dataDelBackendAuth)
+        setResumen(cuotasData)
+      } catch (error) {
+        console.error("Error crítico cargando dashboard:", error)
+        Cookies.remove("auth-token")
+        router.push("/login")
       } finally {
         setLoading(false)
       }
     }
-    fetchData()
+
+    loadDashboardData()
   }, [router])
 
-  // Función para procesar el pago en el backend
-  const handlePagar = async (cobroId: number) => {
-    try {
-      const token = Cookies.get("auth-token")
-      const res = await fetch(`http://127.0.0.1:3007/api/v1/pagos/transacciones/iniciar`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ cobroId })
-      });
-      
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-          alert("Error: El endpoint POST /transacciones/iniciar aún no existe en el backend.");
-          return;
-      }
-
-      const result = await res.json();
-      if (result.success) {
-        alert("Redirigiendo a Webpay Plus...");
-        window.location.href = result.data.url;
-      } else {
-        alert("Error al procesar pago: " + result.message);
-      }
-    } catch (e) {
-      alert("No se pudo iniciar el pago debido a un error de red.");
-    }
-  }
-
-  const cuotasFiltradas = data.cobros.filter((c: any) => {
-    if (filter === 'TODAS') return true;
-    return c.ESTADO === filter;
-  });
-
   if (loading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#1A1A2E]">
-      <Loader2 className="animate-spin text-[#FF8FAB] mb-4" size={48} />
-      <p className="text-white font-black text-[10px] uppercase tracking-widest animate-pulse">Consultando Oracle...</p>
+    <div className="min-h-[80vh] flex flex-col items-center justify-center bg-[#F8FAFC]">
+      <Loader2 className="animate-spin text-[#FF8FAB] mb-4" size={48} strokeWidth={1.5} />
+      <p className="text-[#1A1A2E] font-black text-[10px] uppercase tracking-widest opacity-50">Sincronizando Identidad...</p>
     </div>
   )
 
+  // ==========================================
+  // DATOS 100% REALES (SIN MOCKS)
+  // ==========================================
+  
+  // 1. Identidad Automática
+  const nombresCompletos = usuarioData?.perfil?.nombres || "Estudiante";
+  const primerNombre = nombresCompletos.split(' ')[0];
+  const nombreRol = usuarioData?.roles?.[0]?.nombre_rol || "Usuario del Sistema";
+  
+  // ¡Aquí entra el nombre de tu colegio directamente de Oracle!
+  const nombreColegioReal = usuarioData?.perfil?.nombre_colegio || "Institución Educativa";
+
+  // 2. Finanzas Automáticas
+  const deudaTotal = resumen?.totalPendiente || resumen?.TOTAL_PENDIENTE || 0;
+  const pagosRealizados = resumen?.totalPagado || resumen?.TOTAL_PAGADO || resumen?.cuotasPagadas || 0;
+  const listaCobros = resumen?.cobros || resumen?.COBROS || [];
+  const cuotasPendientes = listaCobros.filter((c: any) => c.ESTADO === 'PENDIENTE' || c.estado === 'PENDIENTE').length;
+
   return (
-    <div className="min-h-screen bg-[#F8F9FA] pb-20">
-      <header className="bg-[#1A1A2E] text-white p-10 rounded-b-[4rem] shadow-2xl relative overflow-hidden">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center relative z-10">
-          <div className="flex items-center gap-6">
-            <Link href="/dashboard/alumno" className="p-4 bg-white/5 rounded-2xl hover:bg-[#FF8FAB] hover:text-[#1A1A2E] transition-all">
-              <ArrowLeft size={20} />
-            </Link>
-            <div>
-              <h1 className="text-3xl font-black uppercase tracking-tighter">Estado de Cuenta</h1>
-              <p className="text-[#FF8FAB] text-[10px] font-black uppercase tracking-[0.3em]">Registros oficiales LemacPay</p>
-            </div>
-          </div>
-          
-          <div className="flex gap-4 mt-8 md:mt-0">
-             <div className="bg-white/5 p-6 rounded-4xl border border-white/10 backdrop-blur-sm">
-                <p className="text-[9px] font-black text-gray-400 uppercase mb-1 tracking-widest text-center">Deuda Pendiente</p>
-                <p className="text-2xl font-black text-[#FF8FAB]">${data.totalPendiente.toLocaleString('es-CL')}</p>
+    <div className="space-y-10 animate-in fade-in duration-700 max-w-7xl mx-auto pb-10">
+      
+      {/* SECCIÓN DE BIENVENIDA */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100">
+        <div>
+          <h2 className="text-4xl font-black text-[#1A1A2E] tracking-tighter uppercase italic">
+            Hola, <span className="text-[#FF8FAB]">{primerNombre}</span> 👋
+          </h2>
+          <p className="text-slate-400 text-[11px] font-bold uppercase tracking-[0.3em] mt-2">
+            Panel Estudiantil • {new Date().toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+        </div>
+        
+        {/* TARJETAS DE IDENTIDAD (ROL Y COLEGIO) */}
+        <div className="flex gap-4">
+          <div className="flex items-center gap-4 bg-slate-50 p-3 pr-6 rounded-3xl shadow-inner border border-slate-100">
+             <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 shadow-sm border border-slate-100">
+                <UserCircle size={24} />
              </div>
-             <div className="bg-white/5 p-6 rounded-4xl border border-white/10 backdrop-blur-sm">
-                <p className="text-[9px] font-black text-gray-400 uppercase mb-1 tracking-widest text-center">Total Pagado</p>
-                <p className="text-2xl font-black text-emerald-400">${data.totalPagado.toLocaleString('es-CL')}</p>
+             <div>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Rol</p>
+                <p className="text-xs font-black text-[#1A1A2E] mt-1 uppercase tracking-tight">{nombreRol}</p>
+             </div>
+          </div>
+
+          <div className="flex items-center gap-4 bg-[#FDF2F5] p-3 pr-6 rounded-3xl shadow-inner border border-[#FF8FAB]/20 sm:flex">
+             <div className="w-12 h-12 bg-[#FF8FAB] rounded-2xl flex items-center justify-center text-white shadow-md">
+                <GraduationCap size={24} />
+             </div>
+             <div>
+                <p className="text-[9px] font-black text-[#FF8FAB] uppercase tracking-widest leading-none">Institución</p>
+                <p className="text-xs font-black text-[#1A1A2E] mt-1 uppercase tracking-tight max-w-37.5 truncate">{nombreColegioReal}</p>
              </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto -mt-12 p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <section className="lg:col-span-8 space-y-6">
-          <div className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
-              <h3 className="font-black text-[#1A1A2E] uppercase text-xs tracking-widest flex items-center gap-3">
-                <Receipt size={20} className="text-[#FF8FAB]" /> Historial de Movimientos
-              </h3>
-              
-              <div className="flex gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
-                {['TODAS', 'PENDIENTE', 'PAGADO'].map((f) => (
-                  <button 
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`px-5 py-2.5 rounded-xl text-[9px] font-black transition-all ${filter === f ? 'bg-[#1A1A2E] text-white shadow-xl' : 'text-slate-400 hover:text-[#1A1A2E]'}`}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
-            </div>
+      {/* TARJETAS FINANCIERAS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <StatCard title="Deuda Total" value={formatCurrencyCLP(deudaTotal)} icon={<Wallet />} color="bg-rose-500" />
+        <StatCard title="Pagos Realizados" value={formatCurrencyCLP(pagosRealizados)} icon={<Star />} color="bg-emerald-500" />
+        <div className="bg-[#1A1A2E] p-8 rounded-[3.5rem] text-white flex flex-col justify-between shadow-2xl relative overflow-hidden group">
+            <Bell className="absolute -right-4 -top-4 w-32 h-32 text-white/5 -rotate-12 group-hover:scale-110 transition-transform duration-700" />
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF8FAB] relative z-10">Avisos</p>
+            <p className="text-xl font-black mt-4 relative z-10 tracking-tight leading-tight">
+              Tienes <span className="text-[#FF8FAB]">{cuotasPendientes}</span> cuotas esperando pago.
+            </p>
+            <Link href="/dashboard/alumno/cuotas" className="mt-8 flex items-center gap-2 text-[10px] font-black uppercase text-white bg-white/10 w-fit px-5 py-3 rounded-2xl hover:bg-[#FF8FAB] hover:text-[#1A1A2E] transition-all relative z-10">
+               Ir a pagar <ChevronRight size={14} />
+            </Link>
+        </div>
+      </div>
 
-            <div className="space-y-4">
-              {/* ALERTA DE ERRORES DEL BACKEND */}
-              {errorMsg && (
-                <div className="p-4 bg-rose-50 text-rose-600 rounded-2xl flex items-center gap-3 text-[10px] font-black uppercase tracking-widest border border-rose-100">
-                    <ServerOff size={18}/> {errorMsg}
-                </div>
-              )}
+      {/* ACCESOS */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <MenuAction title="Mis Cuotas y Pagos" desc="Visualiza tu estado de cuenta, descarga comprobantes y paga mensualidades pendientes." href="/dashboard/alumno/cuotas" icon={<Receipt size={32} />} />
+        <MenuAction title="Historial Blockchain" desc="Consulta el registro inmutable de todas tus transacciones realizadas en el sistema." href="/dashboard/alumno/historial" icon={<History size={32} />} />
+      </section>
 
-              {cuotasFiltradas.length > 0 ? cuotasFiltradas.map((c: any) => (
-                <div key={c.COBRO_ID} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-slate-50/50 rounded-[2.5rem] border border-transparent hover:border-[#FF8FAB]/30 transition-all group">
-                  <div className="flex items-center gap-6">
-                    <div className={`p-4 rounded-2xl ${c.ESTADO === 'PAGADO' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                      {c.ESTADO === 'PAGADO' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
-                    </div>
-                    <div>
-                      <h4 className="font-black text-[#1A1A2E] text-sm uppercase leading-tight">{c.DESCRIPCION}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Vencimiento: {new Date(c.FECHA_VENCIMIENTO).toLocaleDateString('es-CL')}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mt-6 md:mt-0 md:gap-10">
-                    <span className="text-xl font-black text-[#1A1A2E] tracking-tighter">${Number(c.MONTO_ORIGINAL).toLocaleString('es-CL')}</span>
-                    {c.ESTADO === 'PENDIENTE' && (
-                      <button 
-                        onClick={() => handlePagar(c.COBRO_ID)}
-                        className="bg-[#1A1A2E] text-[#FF8FAB] px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
-                      >
-                        Pagar
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )) : (
-                <div className="py-20 text-center border-2 border-dashed border-slate-100 rounded-[3rem]">
-                   <p className="text-slate-300 font-black text-[10px] uppercase tracking-widest">
-                     {errorMsg ? "No se pudieron cargar los datos" : "No tienes registros financieros pendientes"}
-                   </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <aside className="lg:col-span-4 space-y-6">
-           <div className="bg-[#FF8FAB] p-10 rounded-[3.5rem] text-[#1A1A2E] shadow-2xl relative overflow-hidden group">
-              <div className="relative z-10">
-                <div className="bg-[#1A1A2E] text-white w-fit p-3 rounded-2xl mb-6 shadow-xl">
-                    <Tag size={24} />
-                </div>
-                <h3 className="text-2xl font-black uppercase leading-tight tracking-tighter mb-2">Cuotas Especiales</h3>
-                <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mb-10">Basado en conceptos de curso</p>
-                
-                <div className="space-y-4">
-                   {conceptosEspeciales.length > 0 ? conceptosEspeciales.map((conc: any) => (
-                      <SpecialItem 
-                        key={conc.CONCEPTO_ID} 
-                        label={conc.NOMBRE} 
-                        price={Number(conc.MONTO_BASE).toLocaleString('es-CL')} 
-                        onClick={() => handlePagar(conc.CONCEPTO_ID)}
-                      />
-                   )) : (
-                    <p className="text-[10px] font-bold opacity-40 text-center uppercase py-4">No hay conceptos extraordinarios</p>
-                   )}
-                </div>
-              </div>
-              {/* Decoración de fondo */}
-              <div className="absolute -bottom-10 -right-10 opacity-5 rotate-12 group-hover:rotate-0 transition-all duration-1000">
-                <Receipt size={180} />
-              </div>
-           </div>
-        </aside>
-      </main>
     </div>
   )
 }
 
-function SpecialItem({ label, price, onClick }: any) {
+function StatCard({ title, value, icon, color }: any) {
   return (
-    <button 
-      onClick={onClick}
-      className="w-full flex items-center justify-between p-5 bg-white/20 hover:bg-white/40 rounded-3xl transition-all border border-white/10 group"
-    >
-      <span className="text-[10px] font-black uppercase tracking-tight text-left">{label}</span>
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] font-black bg-[#1A1A2E] text-white px-3 py-1.5 rounded-xl shadow-lg">${price}</span>
-        <ChevronRight size={14} className="text-[#1A1A2E]/40 group-hover:translate-x-1 transition-transform" />
+    <div className="bg-white p-8 rounded-[3.5rem] shadow-sm border border-slate-100 flex items-center gap-6 group hover:shadow-xl hover:border-slate-200 transition-all duration-300">
+      <div className={`p-6 ${color} text-white rounded-3xl shadow-lg group-hover:scale-110 transition-transform`}>{icon}</div>
+      <div>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
+        <p className="text-3xl font-black text-[#1A1A2E] tracking-tighter">{value}</p>
       </div>
-    </button>
+    </div>
+  )
+}
+
+function MenuAction({ title, desc, href, icon }: any) {
+  return (
+    <Link href={href} className="bg-white p-10 lg:p-12 rounded-[4rem] border border-slate-100 flex gap-8 items-center group hover:border-[#FF8FAB]/40 hover:shadow-xl transition-all duration-300">
+      <div className="p-6 bg-slate-50 text-slate-400 rounded-4xl group-hover:bg-[#1A1A2E] group-hover:text-[#FF8FAB] transition-all shadow-sm shrink-0">{icon}</div>
+      <div>
+        <h4 className="text-2xl font-black text-[#1A1A2E] uppercase tracking-tighter">{title}</h4>
+        <p className="text-sm text-slate-500 font-bold mt-2 leading-relaxed">{desc}</p>
+      </div>
+    </Link>
   )
 }

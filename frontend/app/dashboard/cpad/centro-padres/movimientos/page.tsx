@@ -4,8 +4,11 @@ import {
   ArrowRightLeft, Search, Loader2, ArrowUpCircle, 
   ArrowDownCircle, AlertCircle, Download, FileText, Filter, ArrowLeft, ShieldAlert
 } from "lucide-react"
-import Cookies from "js-cookie"
 import Link from "next/link"
+
+// ARQUITECTURA LIMPIA (Sube 6 niveles: movimientos -> centro-padres -> cpad -> dashboard -> app -> raíz)
+import { authService } from "../../../../../services/authService"
+import { pagosService } from "../../../../../services/pagosService"
 
 // Interfaz para TypeScript basada en tu tabla de Oracle
 interface Movimiento {
@@ -31,86 +34,58 @@ export default function MovimientosColegioPage() {
   useEffect(() => {
     const fetchMovimientos = async () => {
       try {
-        const token = Cookies.get("auth-token")
-        if (!token) {
-          setErrorMsg("No hay sesión activa. Por favor, inicia sesión.");
-          setIsAuthorized(false); // Faltaba asegurar el bloqueo aquí
-          setLoading(false);
-          return;
-        }
+        // 1. Validar identidad y obtener perfil a través del servicio
+        const perfil = await authService.getMe()
+        const colId = perfil.COLEGIO_ID || 1;
+        
+        // Verificamos si tiene permisos de directiva de Centro de Padres
+        const rolesDelUsuario = perfil.roles || [];
+        const esCentroDePadres = rolesDelUsuario.some((rol: any) => {
+          const code = rol.rol_code;
+          return [
+            'CEN_PRES_CAP', 'CEN_TES_CAP', 'CEN_SEC_CAP', 
+            'DIR_PRES_APO', 'DIR_TES_APO', 'DIR_SEC_APO'
+          ].includes(code);
+        });
 
-        const headers = { 
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json' 
-        }
-        
-        let colId = 1
-        
-        // 1. Validar identidad, colegio y ROL
-        try {
-          const resMe = await fetch("http://127.0.0.1:3007/api/v1/auth/me", { headers })
-          if (resMe.ok) {
-            const jsonMe = await resMe.json()
-            colId = jsonMe.data?.perfil?.colegio_id || 1
-            
-            // Verificamos si tiene permisos de directiva de Centro de Padres
-            const rolesDelUsuario = jsonMe.data?.roles || [];
-            const esCentroDePadres = rolesDelUsuario.some((rol: any) => {
-              const code = rol.rol_code;
-              return code === 'CEN_PRES_CAP' || code === 'CEN_TES_CAP' || code === 'CEN_SEC_CAP' ||
-                     code === 'DIR_PRES_APO' || code === 'DIR_TES_APO' || code === 'DIR_SEC_APO';
-            });
-
-            // Si NO es centro de padres, bloqueamos el acceso y cortamos la ejecución
-            if (!esCentroDePadres) {
-              setIsAuthorized(false);
-              setLoading(false);
-              return; 
-            }
-            
-            // Si pasa la validación, autorizamos
-            setIsAuthorized(true);
-          }
-        } catch (e) { 
-          setErrorMsg("Error validando tus credenciales en el servidor.")
-          setIsAuthorized(false); // Seguridad extra en caso de error
+        // Si NO es centro de padres, bloqueamos el acceso y cortamos la ejecución
+        if (!esCentroDePadres) {
+          setIsAuthorized(false);
           setLoading(false);
-          return;
+          return; 
         }
         
-        // 2. Traer movimientos desde MS_PAGOS (Puerto 3002)
-        const res = await fetch(`http://127.0.0.1:3002/api/v1/pagos/movimientos/colegio/${colId}`, { headers })
+        // Si pasa la validación, autorizamos
+        setIsAuthorized(true);
         
-        const contentType = res.headers.get("content-type")
-        if (contentType && contentType.includes("application/json")) {
-           const json = await res.json()
-           if (json.success || json.status === "success") {
-              const dataList = json.data.map((m: any) => ({
-                movimiento_id: m.MOVIMIENTO_ID || m.movimiento_id,
-                tipo_movimiento: m.TIPO_MOVIMIENTO || m.tipo_movimiento,
-                glosa: m.GLOSA || m.glosa,
-                monto: m.MONTO || m.monto,
-                fecha_movimiento: m.FECHA_MOVIMIENTO || m.fecha_movimiento || null
-              }));
-              
-              setMovimientos(dataList)
-              
-              const ing = dataList.filter((m: Movimiento) => m.tipo_movimiento === 'INGRESO').reduce((acc: number, m: Movimiento) => acc + Number(m.monto), 0)
-              const egr = dataList.filter((m: Movimiento) => m.tipo_movimiento === 'EGRESO').reduce((acc: number, m: Movimiento) => acc + Number(m.monto), 0)
-              setStats({ ingresos: ing, egresos: egr })
-           } else {
-             setErrorMsg("El servidor rechazó la solicitud de movimientos.")
-           }
-        } else {
-           console.warn("La ruta /movimientos/colegio no devolvió JSON. Verifica MS_PAGOS.")
-        }
+        // 2. Traer movimientos desde MS_PAGOS usando el servicio limpio
+        const data = await pagosService.getMovimientosPorColegio(colId)
+        
+        // Mapeamos los datos por si Oracle los envía en MAYÚSCULAS
+        const dataList = data.map((m: any) => ({
+          movimiento_id: m.MOVIMIENTO_ID || m.movimiento_id,
+          tipo_movimiento: m.TIPO_MOVIMIENTO || m.tipo_movimiento,
+          glosa: m.GLOSA || m.glosa,
+          monto: m.MONTO || m.monto,
+          fecha_movimiento: m.FECHA_MOVIMIENTO || m.fecha_movimiento || null
+        }));
+        
+        setMovimientos(dataList)
+        
+        // Calcular estadísticas
+        const ing = dataList.filter((m: Movimiento) => m.tipo_movimiento === 'INGRESO').reduce((acc: number, m: Movimiento) => acc + Number(m.monto), 0)
+        const egr = dataList.filter((m: Movimiento) => m.tipo_movimiento === 'EGRESO').reduce((acc: number, m: Movimiento) => acc + Number(m.monto), 0)
+        setStats({ ingresos: ing, egresos: egr })
+
       } catch (e: any) { 
         console.error(e)
-        setErrorMsg("Error de conexión con el servidor de pagos (MS_PAGOS).")
+        setErrorMsg(e.message || "Error de conexión con el servidor de pagos (MS_PAGOS).")
+        setIsAuthorized(false); // Seguridad extra en caso de error
       } finally { 
         setLoading(false) 
       }
     }
+    
     fetchMovimientos()
   }, [])
 
@@ -139,8 +114,8 @@ export default function MovimientosColegioPage() {
       <p className="text-slate-500 text-sm mb-8 max-w-md mx-auto">
         No tienes los permisos necesarios para ver el Libro Mayor. Esta vista es exclusiva para miembros de la directiva (Tesorero/Presidente).
       </p>
-      <Link href="/dashboard" className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#1A1A2E] bg-slate-50 hover:bg-rose-50 px-6 py-3 rounded-2xl transition-colors border border-slate-100 hover:border-rose-200">
-        <ArrowLeft size={16} /> Volver al Inicio
+      <Link href="/dashboard/cpad/centro-padres" className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#1A1A2E] bg-slate-50 hover:bg-rose-50 px-6 py-3 rounded-2xl transition-colors border border-slate-100 hover:border-rose-200">
+        <ArrowLeft size={16} /> Volver al Panel
       </Link>
     </div>
   )
@@ -233,7 +208,7 @@ export default function MovimientosColegioPage() {
         </div>
 
         <div className="overflow-x-auto rounded-3xl border border-slate-100">
-          <table className="w-full text-left min-w-200 border-collapse">
+          <table className="w-full text-left min-w-150 border-collapse">
             <thead className="bg-[#FAF5FF] text-[#1A1A2E] border-b border-slate-200">
               <tr>
                 <th className="p-5 text-[10px] font-black uppercase tracking-widest w-24">ID</th>

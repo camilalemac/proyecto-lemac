@@ -16,61 +16,75 @@ export default function LoginPage() {
     const password = (form.elements.namedItem("password") as HTMLInputElement).value
 
     try {
-      const result = await login({
+      // 1. AUTENTICACIÓN: Obtener el accessToken
+      const loginResult = await login({
         email: email.toLowerCase().trim(),
         password,
       })
 
-      // El role viene desde el payload decodificado en tu ruta de API (NextResponse)
-      // Lo normalizamos a mayúsculas para que coincida exactamente con el script SQL
-      const userRole = result.data.user.role?.toUpperCase() ?? ""
+      const token = loginResult.data.accessToken;
 
-      console.log("Iniciando sesión con rol:", userRole);
-
-      // --- LÓGICA DE REDIRECCIÓN BASADA EN TUS ROLES SQL ---
-      
-      // 1. Administradores del Sistema
-      if (userRole === 'SYS_ADMIN' || userRole === 'SUPERADMIN') {
-        router.push('/dashboard/admin');
-      } 
-      
-      // 2. Personal Directivo (Staff)
-      else if (userRole === 'STF_DIR') {
-        router.push('/dashboard/direccion');
-      } 
-      
-      // 3. Profesores
-      else if (userRole === 'STF_PROF') {
-        router.push('/dashboard/profesor');
-      } 
-      
-      // 4. Apoderados (Titulares y Directiva)
-      else if (userRole === 'FAM_APO' || userRole.startsWith('DIR_') && userRole.endsWith('_APO')) {
-        // Si es un tesorero/presidente de apoderados, podrías mandarlo a una vista especial
-        // o al dashboard general de apoderados con permisos extra.
-        router.push('/dashboard/apoderado');
-      } 
-      
-      // 5. Alumnos (Regulares y Directiva)
-      else if (userRole === 'ALU_REG' || userRole.startsWith('DIR_') && userRole.endsWith('_ALU')) {
-        router.push('/dashboard/alumno');
-      } 
-      
-      // 6. Centros Generales (CAL / CAP)
-      else if (userRole.startsWith('CEN_')) {
-        router.push('/dashboard/centros');
+      if (!token) {
+        throw new Error("No se pudo obtener el token de acceso.");
       }
 
-      // Caso por defecto
-      else {
-        console.warn("Rol no mapeado a una ruta:", userRole);
-        router.push('/dashboard/general'); 
+      // 2. IDENTIDAD DINÁMICA: Consulta al puerto 3003 (MS_IDENTITY)
+      // Usamos la ruta /me que configuramos en tu identity.controller.ts
+      const responseMe = await fetch(`http://localhost:3003/me`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Si la respuesta no es OK, probablemente el token no es válido para el MS
+      if (!responseMe.ok) {
+        throw new Error("Error al validar identidad en el microservicio.");
+      }
+
+      const identity = await responseMe.json();
+
+      // 3. ENRUTAMIENTO INTELIGENTE: Basado en tus tablas de Oracle
+      // Accedemos a identity.data.roles[0].rol_code
+      const primaryRole = identity.data.roles[0]?.rol_code?.toUpperCase() ?? "";
+      
+      console.log("Conexión exitosa. Rol detectado:", primaryRole);
+
+      switch (true) {
+        case (primaryRole === 'SYS_ADMIN' || primaryRole === 'SUPERADMIN'):
+          router.push('/dashboard/admin');
+          break;
+        
+        case (primaryRole === 'STF_DIR'):
+          router.push('/dashboard/direccion');
+          break;
+
+        case (primaryRole === 'STF_PROF'):
+          router.push('/dashboard/profesor');
+          break;
+
+        // Si es Apoderado regular o Directiva de Apoderados (Tesorero, Presidente, etc.)
+        case (primaryRole === 'FAM_APO' || (primaryRole.startsWith('DIR_') && primaryRole.endsWith('_APO'))):
+          router.push('/dashboard/apoderado');
+          break;
+
+        // Si es Alumno regular o Directiva de Alumnos
+        case (primaryRole === 'ALU_REG' || (primaryRole.startsWith('DIR_') && primaryRole.endsWith('_ALU'))):
+          router.push('/dashboard/alumno');
+          break;
+
+        case (primaryRole.startsWith('CEN_')):
+          router.push('/dashboard/centros');
+          break;
+
+        default:
+          router.push('/dashboard/general');
       }
 
     } catch (error: any) {
-      console.error("Login error:", error)
-      // Capturamos el mensaje que devuelve tu NextResponse
-      alert(error.message || "Credenciales incorrectas o error de servidor");
+      console.error("Error en el flujo:", error);
+      alert(error.message || "Error al conectar con MS_IDENTITY");
     }
   }
 

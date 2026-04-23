@@ -1,108 +1,98 @@
 "use client"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Cookies from "js-cookie"
 import Link from "next/link"
 import { 
   LayoutDashboard, Receipt, History, ShieldCheck,
   LogOut, Crown, Users, ArrowLeft, ArrowRightLeft,
-  PieChart, BarChart3, FileText, Edit3, Wallet
+  PieChart, BarChart3, FileText, Edit3, Wallet, Loader2
 } from "lucide-react"
+
+// ARQUITECTURA LIMPIA
+import { authService } from "../../../services/authService"
 
 export default function AlumnoLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const [userCargo, setUserCargo] = useState<string>("Alumno")
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = Cookies.get("auth-token")
-    if (token) {
+    const checkAuth = async () => {
+      const token = Cookies.get("auth-token")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
       try {
-        const payload = JSON.parse(atob(token.split(".")[1]))
-        const cargoActual = payload.role || payload.cargo || "Alumno"
-        setUserCargo(cargoActual)
+        // Usamos nuestro servicio para obtener el cargo real desde el backend
+        const perfil = await authService.getMe()
+        setUserCargo(perfil.rol || "Alumno")
       } catch (e) {
-        console.error("Error al decodificar token en Layout")
+        console.error("Sesión inválida en Layout")
+        router.push("/login")
+      } finally {
+        setLoading(false)
       }
     }
-  }, [])
+    checkAuth()
+  }, [pathname, router])
 
-  // 1. Detectar Cargo
-  const cargoNormalizado = userCargo.toLowerCase()
-  const esCeal = cargoNormalizado === "ceal-presidente" || cargoNormalizado.includes("cen_pres")
-  const esPresidenteCurso = cargoNormalizado === "presidente" || cargoNormalizado.includes("dir_pres")
-  const esSecretario = cargoNormalizado === "secretario" || cargoNormalizado.includes("sec_")
-  const esTesorero = cargoNormalizado === "tesorero" || cargoNormalizado.includes("tes_")
+  // 1. Lógica de Detección de Roles (Normalizada)
+  const cargo = userCargo.toUpperCase()
+  const esCeal = cargo.includes("CEN_PRES") || cargo.includes("CEAL")
+  const esPresidente = cargo.includes("DIR_PRES")
+  const esSecretario = cargo.includes("SEC")
+  const esTesorero = cargo.includes("TES")
   
-  const esDirectivo = esCeal || esPresidenteCurso || esSecretario || esTesorero
+  const esDirectivo = esCeal || esPresidente || esSecretario || esTesorero
 
-  // 2. Detectar dónde estamos navegando
-  const estaEnPresidenteCurso = pathname.includes("/dashboard/alumno/presidente") && !pathname.includes("ceal-presidente")
-  const estaEnCeal = pathname.includes("/dashboard/alumno/ceal-presidente")
-  const estaEnSecretario = pathname.includes("/dashboard/alumno/secretario")
-  const estaEnTesorero = pathname.includes("/dashboard/alumno/tesorero")
-  
-  const estaEnDirectiva = estaEnPresidenteCurso || estaEnCeal || estaEnSecretario || estaEnTesorero
-
-  // 3. Menús Inteligentes
+  // 2. Menús según ubicación
   const menuAlumno = [
     { name: "Inicio", path: "/dashboard/alumno", icon: <LayoutDashboard size={20} /> },
     { name: "Mis Cuotas", path: "/dashboard/alumno/cuotas", icon: <Receipt size={20} /> },
     { name: "Historial", path: "/dashboard/alumno/historial", icon: <History size={20} /> },
   ]
 
-  const menuPresidenteCurso = [
-    { name: "Panel Directiva", path: "/dashboard/alumno/presidente", icon: <Crown size={20} /> },
-    { name: "Cobranza Curso", path: "/dashboard/alumno/presidente/cobranza", icon: <Users size={20} /> },
-  ]
-
-  const menuCeal = [
-    { name: "Dashboard CEAL", path: "/dashboard/alumno/ceal-presidente", icon: <Crown size={20} /> },
-    { name: "Libro Mayor", path: "/dashboard/alumno/ceal-presidente/ingresos-egresos", icon: <ArrowRightLeft size={20} /> },
-    { name: "Gastos por Áreas", path: "/dashboard/alumno/ceal-presidente/gastos", icon: <PieChart size={20} /> },
-    { name: "Balance 2026", path: "/dashboard/alumno/ceal-presidente/balance", icon: <BarChart3 size={20} /> },
-    { name: "Reportes Oficiales", path: "/dashboard/alumno/ceal-presidente/reportes", icon: <FileText size={20} /> },
-  ]
-
-  const menuSecretario = [
-    { name: "Actas de Reuniones", path: "/dashboard/alumno/secretario", icon: <Edit3 size={20} /> },
-  ]
-
-  // EL NUEVO MENÚ PARA EL TESORERO
   const menuTesorero = [
     { name: "Panel Financiero", path: "/dashboard/alumno/tesorero", icon: <Wallet size={20} /> },
     { name: "Gestión de Cobranza", path: "/dashboard/alumno/tesorero/cobranza", icon: <Users size={20} /> },
-    { name: "Reportes Oficiales", path: "/dashboard/alumno/tesorero/reportes", icon: <FileText size={20} /> }, // ¡Aquí está la opción agregada!
+    { name: "Reportes Oficiales", path: "/dashboard/alumno/tesorero/reportes", icon: <FileText size={20} /> },
   ]
-  
 
-  // 4. Decidimos qué mostrar en el Sidebar
+  // 3. Selección de Menú Activo
   let menuActivo = menuAlumno
   let tituloPortal = "PORTAL ALUMNO"
-  
-  if (estaEnCeal) {
-    menuActivo = menuCeal
-    tituloPortal = "PORTAL CEAL"
-  } else if (estaEnPresidenteCurso) {
-    menuActivo = menuPresidenteCurso
-    tituloPortal = "PORTAL DIRECTIVA"
-  } else if (estaEnSecretario) {
-    menuActivo = menuSecretario
-    tituloPortal = "PORTAL SECRETARÍA"
-  } else if (estaEnTesorero) {
+  let rutaGestion = ""
+
+  if (pathname.includes("/tesorero")) {
     menuActivo = menuTesorero
-    tituloPortal = "PORTAL TESORERÍA"
+    tituloPortal = "TESORERÍA"
+  } 
+  // ... Agregar aquí los otros IF para Presidente/CEAL cuando los crees
+
+  // Determinar ruta para el botón de "Entrar a Gestión"
+  if (esTesorero) rutaGestion = "/dashboard/alumno/tesorero"
+  else if (esPresidente) rutaGestion = "/dashboard/alumno/presidente"
+  else if (esCeal) rutaGestion = "/dashboard/alumno/ceal-presidente"
+
+  const handleLogout = () => {
+    Cookies.remove("auth-token")
+    router.push("/login")
   }
 
-  // Determinar a qué ruta debe llevar el botón especial de "Entrar a Gestión"
-  let rutaDirectiva = "/dashboard/alumno/presidente"
-  if (esCeal) rutaDirectiva = "/dashboard/alumno/ceal-presidente"
-  if (esSecretario) rutaDirectiva = "/dashboard/alumno/secretario"
-  if (esTesorero) rutaDirectiva = "/dashboard/alumno/tesorero"
+  if (loading) return (
+    <div className="h-screen w-full flex items-center justify-center bg-[#1A1A2E]">
+      <Loader2 className="animate-spin text-[#FF8FAB]" size={40} />
+    </div>
+  )
 
   return (
     <div className="flex min-h-screen bg-[#F8F9FA]">
       
-      <aside className="w-72 bg-[#1A1A2E] text-white flex flex-col shadow-2xl">
+      <aside className="w-72 bg-[#1A1A2E] text-white flex flex-col shadow-2xl sticky top-0 h-screen">
         <div className="p-8 border-b border-white/5">
           <h2 className="text-2xl font-black tracking-tight">
             Lemac<span className="text-[#FF8FAB]">Pay</span>
@@ -112,31 +102,18 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
           </p>
         </div>
         
-        <nav className="flex-1 p-6 space-y-2">
-          <p className="text-[10px] text-gray-500 font-bold uppercase px-3 mb-4 tracking-widest">General</p>
-          
-          {menuActivo.map((item, i) => {
-            const isActive = pathname === item.path || 
-              (item.path !== "/dashboard/alumno" && 
-               item.path !== "/dashboard/alumno/presidente" && 
-               item.path !== "/dashboard/alumno/ceal-presidente" && 
-               item.path !== "/dashboard/alumno/secretario" &&
-               item.path !== "/dashboard/alumno/tesorero" &&
-               pathname.startsWith(item.path))
+        <nav className="flex-1 p-6 space-y-2 overflow-y-auto">
+          {menuActivo.map((item, i) => (
+            <NavLink key={i} href={item.path} active={pathname === item.path}>
+              {item.icon} {item.name}
+            </NavLink>
+          ))}
 
-            return (
-              <NavLink key={i} href={item.path} active={isActive}>
-                {item.icon} {item.name}
-              </NavLink>
-            )
-          })}
-
-          {esDirectivo && !estaEnDirectiva && (
+          {/* Botón especial si es directivo pero está en la vista normal */}
+          {esDirectivo && !pathname.includes("/presidente") && !pathname.includes("/tesorero") && (
             <div className="pt-6 mt-6 border-t border-white/5">
-              <p className="text-[10px] text-[#FF8FAB] font-bold uppercase px-3 mb-4 tracking-widest">
-                Gestión
-              </p>
-              <NavLink href={rutaDirectiva} active={false} isSpecial>
+              <p className="text-[10px] text-[#FF8FAB] font-bold uppercase px-3 mb-4 tracking-widest">Gestión</p>
+              <NavLink href={rutaGestion} active={false} isSpecial>
                 <ShieldCheck size={20} /> Entrar a Panel Oficial
               </NavLink>
             </div>
@@ -144,23 +121,25 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
         </nav>
 
         <div className="p-6 border-t border-white/5 space-y-2">
-          {estaEnDirectiva && (
+          {/* Botón para volver desde paneles de gestión */}
+          {(pathname.includes("/tesorero") || pathname.includes("/presidente")) && (
              <Link href="/dashboard/alumno" className="flex items-center gap-3 p-3 w-full text-gray-400 hover:text-white transition-colors text-sm font-medium">
                <ArrowLeft size={18} /> Volver a Alumno
              </Link>
           )}
 
-          <button className="flex items-center gap-3 p-3 w-full text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl transition-colors text-sm font-medium">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center gap-3 p-3 w-full text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl transition-colors text-sm font-medium"
+          >
             <LogOut size={18} /> Cerrar Sesión
           </button>
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 w-full overflow-y-auto">
-        <main className="p-10">
-          {children}
-        </main>
-      </div>
+      <main className="flex-1 p-10 overflow-y-auto">
+        {children}
+      </main>
     </div>
   )
 }

@@ -10,12 +10,16 @@ import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 
+// IMPORTACIONES ARQUITECTURA LIMPIA
+import { academicoService } from "../../../../services/academicoService"
+import { ICurso } from "../../../../types/admin.types"
+
 export default function GestionCursosPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
   const [conexionBackend, setConexionBackend] = useState(true)
-  const [cursos, setCursos] = useState<any[]>([])
+  const [cursos, setCursos] = useState<ICurso[]>([])
   
   // Modales
   const [showModal, setShowModal] = useState(false)
@@ -60,19 +64,26 @@ export default function GestionCursosPage() {
     setAuthorized(true)
 
     try {
-      const token = Cookies.get("auth-token")
-      const headers: Record<string, string> = { 'Authorization': `Bearer ${token}` }
+      // 1. Llamada al servicio limpio
+      const data = await academicoService.getCursos();
       
-      const res = await fetch("http://127.0.0.1:3007/api/v1/academico/cursos", { headers })
-      if (!res.ok) throw new Error("Error de conexión al Gateway")
-      
-      const data = await res.json()
+      // 2. Mapear datos si es necesario (Por si Oracle envía mayúsculas)
+      const mappedCursos = data.map((c: any) => ({
+        ...c,
+        CURSO_ID: c.CURSO_ID || c.cursoId,
+        LETRA: c.LETRA || c.letra,
+        PERIODO_ANIO: c.PERIODO_ANIO || c.periodoAnio,
+        NIVEL_NOMBRE_LARGO: c.NIVEL_NOMBRE_LARGO || c.nivelNombreLargo,
+        PROFESOR_NOMBRES: c.PROFESOR_NOMBRES || c.profesorNombres,
+        PROFESOR_APELLIDOS: c.PROFESOR_APELLIDOS || c.profesorApellidos,
+        NIVEL_ID: c.NIVEL_ID || c.nivelId,
+        PROFESOR_JEFE_ID: c.PROFESOR_JEFE_ID || c.profesorJefeId
+      }));
 
-      if (data.success) {
-        setCursos(data.data || [])
-        setConexionBackend(true)
-      }
+      setCursos(mappedCursos)
+      setConexionBackend(true)
     } catch (err) {
+      console.error("Error cargando cursos:", err);
       setConexionBackend(false)
       setCursos([]) 
     } finally {
@@ -86,7 +97,6 @@ export default function GestionCursosPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = Cookies.get("auth-token")
       const payload = {
         PERIODO_ID: parseInt(formData.PERIODO_ID),
         NIVEL_ID: parseInt(formData.NIVEL_ID),
@@ -94,16 +104,8 @@ export default function GestionCursosPage() {
         PROFESOR_JEFE_ID: formData.PROFESOR_JEFE_ID ? parseInt(formData.PROFESOR_JEFE_ID) : null
       }
 
-      const res = await fetch("http://127.0.0.1:3007/api/v1/academico/cursos", {
-        method: "POST",
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+      const data = await academicoService.createCurso(payload);
       
-      const data = await res.json();
       if (data.success) {
         setShowModal(false);
         setFormData({ PERIODO_ID: "", NIVEL_ID: "", LETRA: "", PROFESOR_JEFE_ID: "" })
@@ -116,37 +118,29 @@ export default function GestionCursosPage() {
     }
   }
 
-  // ✅ GESTIONAR / EDITAR CURSO (PUT)
-  const openEditModal = (curso: any) => {
+  // ✅ ABRIR MODAL EDICIÓN
+  const openEditModal = (curso: ICurso) => {
     setEditData({
-      CURSO_ID: curso.CURSO_ID || curso.cursoId,
-      NIVEL_ID: curso.NIVEL_ID || curso.nivelId || "",
-      LETRA: curso.LETRA || curso.letra || "",
-      PROFESOR_JEFE_ID: curso.PROFESOR_JEFE_ID || curso.profesorJefeId || ""
+      CURSO_ID: curso.CURSO_ID as number,
+      NIVEL_ID: String(curso.NIVEL_ID || ""),
+      LETRA: curso.LETRA || "",
+      PROFESOR_JEFE_ID: String(curso.PROFESOR_JEFE_ID || "")
     })
     setShowEditModal(true)
   }
 
+  // ✅ EDITAR CURSO (PUT)
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = Cookies.get("auth-token")
       const payload = {
         NIVEL_ID: parseInt(editData.NIVEL_ID),
         LETRA: editData.LETRA.toUpperCase(),
         PROFESOR_JEFE_ID: editData.PROFESOR_JEFE_ID ? parseInt(editData.PROFESOR_JEFE_ID) : null
       }
 
-      const res = await fetch(`http://127.0.0.1:3007/api/v1/academico/cursos/${editData.CURSO_ID}`, {
-        method: "PUT",
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+      const data = await academicoService.updateCurso(editData.CURSO_ID, payload);
       
-      const data = await res.json();
       if (data.success) {
         setShowEditModal(false);
         fetchCursos();
@@ -163,13 +157,8 @@ export default function GestionCursosPage() {
     if (!window.confirm(`¿Estás seguro de eliminar el curso ID ${cursoId}? Esta acción es irreversible.`)) return;
 
     try {
-      const token = Cookies.get("auth-token")
-      const res = await fetch(`http://127.0.0.1:3007/api/v1/academico/cursos/${cursoId}`, {
-        method: "DELETE",
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const data = await academicoService.deleteCurso(cursoId);
       
-      const data = await res.json();
       if (data.success) {
         fetchCursos();
       } else {
@@ -233,20 +222,20 @@ export default function GestionCursosPage() {
         )}
 
         {cursos.length > 0 ? cursos.map((curso) => (
-          <div key={curso.CURSO_ID || curso.cursoId} className="bg-white rounded-[3.5rem] border border-pink-50 shadow-sm hover:shadow-xl transition-all overflow-hidden group">
+          <div key={curso.CURSO_ID} className="bg-white rounded-[3.5rem] border border-pink-50 shadow-sm hover:shadow-xl transition-all overflow-hidden group">
             <div className="p-10">
               <div className="flex justify-between items-start mb-6">
                 <div className="w-16 h-16 bg-[#0F172A] rounded-2xl flex items-center justify-center text-white text-2xl font-black italic shadow-lg shadow-[#0F172A]/20">
-                  {curso.LETRA || curso.letra}
+                  {curso.LETRA}
                 </div>
                 <div className="text-right italic">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Año Periodo</p>
-                  <p className="text-sm font-black text-[#0F172A]">{curso.PERIODO_ANIO || curso.periodoAnio || "Activo"}</p>
+                  <p className="text-sm font-black text-[#0F172A]">{curso.PERIODO_ANIO || "Activo"}</p>
                 </div>
               </div>
               
               <h3 className="text-2xl font-black text-[#0F172A] uppercase tracking-tighter mb-2">
-                {curso.NIVEL_NOMBRE_LARGO || curso.nivelNombreLargo || `Nivel ID ${curso.NIVEL_ID || curso.nivelId}`}
+                {curso.NIVEL_NOMBRE_LARGO || `Nivel ID ${curso.NIVEL_ID}`}
               </h3>
               
               <div className="space-y-4 mt-8 border-t border-pink-50 pt-8">
@@ -255,13 +244,15 @@ export default function GestionCursosPage() {
                   <div>
                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Profesor Jefe</p>
                     <p className="text-xs font-bold text-[#0F172A] uppercase">
-                      {curso.PROFESOR_NOMBRES ? `${curso.PROFESOR_NOMBRES} ${curso.PROFESOR_APELLIDOS}` : 'SIN ASIGNAR'}
+                      {curso.PROFESOR_NOMBRES 
+                        ? `${curso.PROFESOR_NOMBRES} ${curso.PROFESOR_APELLIDOS}` 
+                        : 'SIN ASIGNAR'}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Users size={16} className="text-blue-400" />
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID Interno: {curso.CURSO_ID || curso.cursoId}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID Interno: {curso.CURSO_ID}</p>
                 </div>
               </div>
             </div>
@@ -274,7 +265,7 @@ export default function GestionCursosPage() {
                   <Edit3 size={14} /> Gestionar
                </button>
                <button 
-                 onClick={() => handleDelete(curso.CURSO_ID || curso.cursoId)}
+                 onClick={() => handleDelete(curso.CURSO_ID as number)}
                  className="p-2 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm border border-transparent hover:border-rose-500"
                >
                   <Trash2 size={16} />
@@ -285,7 +276,7 @@ export default function GestionCursosPage() {
           <div className="col-span-full py-20 flex flex-col items-center opacity-40">
             <BookOpen size={80} className="text-[#0F172A] mb-6 drop-shadow-md" />
             <p className="font-black uppercase tracking-widest text-[#0F172A] text-xl">Sin Registros</p>
-            <p className="text-[11px] font-bold text-[#0F172A] mt-2 uppercase tracking-widest">Crea un curso para comenzar a ver el diseño.</p>
+            <p className="text-[11px] font-bold text-[#0F172A] mt-2 uppercase tracking-widest">Crea un curso para visualizarlo aquí.</p>
           </div>
         )}
       </div>
