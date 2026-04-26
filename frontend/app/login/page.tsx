@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { GraduationCap } from "lucide-react"
@@ -8,9 +9,12 @@ import { useLogin } from "@/hooks/useLogin"
 export default function LoginPage() {
   const router = useRouter()
   const { login, loading } = useLogin()
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setErrorMsg(null) // <-- Reseteamos el error al intentar de nuevo
+    
     const form = e.currentTarget
     const email = (form.elements.namedItem("email") as HTMLInputElement).value
     const password = (form.elements.namedItem("password") as HTMLInputElement).value
@@ -28,9 +32,9 @@ export default function LoginPage() {
         throw new Error("No se pudo obtener el token de acceso.");
       }
 
-      // 2. IDENTIDAD DINÁMICA: Consulta al puerto 3003 (MS_IDENTITY)
-      // Usamos la ruta /me que configuramos en tu identity.controller.ts
-      const responseMe = await fetch(`http://localhost:3003/me`, {
+      // 2. IDENTIDAD DINÁMICA: Consulta a través del GATEWAY (Puerto 3002)
+      // Redirigimos la llamada al Gateway para que él se encargue de buscar a MS_IDENTITY
+      const responseMe = await fetch(`http://localhost:3002/api/v1/identity/me`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -46,45 +50,36 @@ export default function LoginPage() {
       const identity = await responseMe.json();
 
       // 3. ENRUTAMIENTO INTELIGENTE: Basado en tus tablas de Oracle
-      // Accedemos a identity.data.roles[0].rol_code
-      const primaryRole = identity.data.roles[0]?.rol_code?.toUpperCase() ?? "";
+      const rolEncontrado = identity.data?.roles?.[0]?.rolCode || identity.data?.roles?.[0]?.rol_code || "";
+      const primaryRole = rolEncontrado.toUpperCase();
       
       console.log("Conexión exitosa. Rol detectado:", primaryRole);
 
-      switch (true) {
-        case (primaryRole === 'SYS_ADMIN' || primaryRole === 'SUPERADMIN'):
-          router.push('/dashboard/admin');
-          break;
-        
-        case (primaryRole === 'STF_DIR'):
-          router.push('/dashboard/direccion');
-          break;
-
-        case (primaryRole === 'STF_PROF'):
-          router.push('/dashboard/profesor');
-          break;
-
-        // Si es Apoderado regular o Directiva de Apoderados (Tesorero, Presidente, etc.)
-        case (primaryRole === 'FAM_APO' || (primaryRole.startsWith('DIR_') && primaryRole.endsWith('_APO'))):
-          router.push('/dashboard/apoderado');
-          break;
-
-        // Si es Alumno regular o Directiva de Alumnos
-        case (primaryRole === 'ALU_REG' || (primaryRole.startsWith('DIR_') && primaryRole.endsWith('_ALU'))):
-          router.push('/dashboard/alumno');
-          break;
-
-        case (primaryRole.startsWith('CEN_')):
-          router.push('/dashboard/centros');
-          break;
-
-        default:
-          router.push('/dashboard/general');
+      // Usamos .includes() para que atrape variaciones (ej. "ALU" o "ALU_REG")
+      if (primaryRole.includes('ADMIN') || primaryRole.includes('SYS')) {
+        router.push('/dashboard/admin');
+      } else if (primaryRole.includes('PROF')) {
+        router.push('/dashboard/profesor');
+      } else if (primaryRole.includes('APO')) {
+        router.push('/dashboard/apoderado');
+      } else if (primaryRole.includes('ALU')) {
+        router.push('/dashboard/alumno');
+      } else if (primaryRole.includes('CEN_')) {
+        router.push('/dashboard/centros');
+      } else if (primaryRole.includes('DIR')) {
+        router.push('/dashboard/direccion');
+      } else {
+        // Fallback: Si el rol viene vacío porque la cuenta es muy nueva, lo mandamos a alumno por defecto
+        router.push('/dashboard/alumno');
       }
 
-    } catch (error: any) {
-      console.error("Error en el flujo:", error);
-      alert(error.message || "Error al conectar con MS_IDENTITY");
+    } catch (err: unknown) {
+      // 🛡️ AQUÍ ATRAPAMOS EL ERROR PARA QUE NEXT.JS NO EXPLOTE
+      const message = err instanceof Error ? err.message : "Credenciales incorrectas";
+      console.warn("Fallo en login:", message);
+      
+      // Seteamos el estado de error para mostrarlo en la UI
+      setErrorMsg(message); 
     }
   }
 
@@ -98,6 +93,13 @@ export default function LoginPage() {
           <h1 className="text-xl font-bold text-[#1A1A2E]">Gestión Lemac</h1>
           <p className="text-sm text-gray-400">Plataforma Educativa 2026</p>
         </div>
+
+        {/* 🛡️ BLOQUE VISUAL DE ERROR CONTROLADO */}
+        {errorMsg && (
+          <div className="mb-6 p-3 bg-rose-50 border border-rose-100 text-rose-600 text-sm font-bold rounded-lg text-center">
+            {errorMsg}
+          </div>
+        )}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>

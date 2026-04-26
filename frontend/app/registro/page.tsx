@@ -1,14 +1,23 @@
 "use client"
 import { useState, useEffect } from "react"
 import { 
-  GraduationCap, Eye, EyeOff, Check, X, Plus, AlertCircle, CheckCircle2 
+  GraduationCap, Eye, EyeOff, X, Plus, AlertCircle, CheckCircle2 
 } from "lucide-react"
+
+// Creamos una interfaz para evitar el uso de 'any' en las regiones/comunas
+interface IGeoItem {
+  regionId?: number;
+  provinciaId?: number;
+  comunaId?: number;
+  id?: number;
+  nombre: string;
+}
 
 export default function RegistroPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   
-  const GATEWAY_URL = "http://127.0.0.1:3007/api/v1"; 
+  const GATEWAY_URL = "http://localhost:3002/api/v1"; 
 
   const [formData, setFormData] = useState({
     rut: "", nombre: "", email: "", password: "", confirmarPassword: "",
@@ -17,33 +26,41 @@ export default function RegistroPage() {
 
   const [rutValido, setRutValido] = useState<boolean | null>(null)
   const [hijos, setHijos] = useState<{rut: string, valido: boolean | null}[]>([{rut: "", valido: null}])
-  const [regiones, setRegiones] = useState([])
-  const [provincias, setProvincias] = useState([])
-  const [comunas, setComunas] = useState([])
+  
+  // Le decimos a TypeScript qué forma tienen estos arrays
+  const [regiones, setRegiones] = useState<IGeoItem[]>([])
+  const [provincias, setProvincias] = useState<IGeoItem[]>([])
+  const [comunas, setComunas] = useState<IGeoItem[]>([])
 
   const formatRut = (value: string) => {
-    let clean = value.replace(/[^0-9kK]/g, '').toUpperCase().slice(0, 9); 
+    const clean = value.replace(/[^0-9kK]/g, '').toUpperCase().slice(0, 9);
     if (clean.length === 0) return "";
     if (clean.length <= 1) return clean;
+    
     let body = clean.slice(0, -1);
-    let dv = clean.slice(-1);
+    const dv = clean.slice(-1);
+    
     body = body.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     return `${body}-${dv}`;
   };
 
   const isValidRut = (rutFormateado: string) => {
-    let clean = rutFormateado.replace(/[^0-9kK]/g, '').toUpperCase();
+    const clean = rutFormateado.replace(/[^0-9kK]/g, '').toUpperCase();
     if (clean.length < 8) return false;
-    let body = clean.slice(0, -1);
-    let dv = clean.slice(-1);
+    
+    const body = clean.slice(0, -1);
+    const dv = clean.slice(-1);
+    
     let sum = 0;
     let multiplier = 2;
     for (let i = body.length - 1; i >= 0; i--) {
       sum += parseInt(body[i]) * multiplier;
       multiplier = multiplier === 7 ? 2 : multiplier + 1;
     }
-    let expectedDv = 11 - (sum % 11);
-    let finalDv = expectedDv === 11 ? '0' : expectedDv === 10 ? 'K' : expectedDv.toString();
+    
+    const expectedDv = 11 - (sum % 11);
+    const finalDv = expectedDv === 11 ? '0' : expectedDv === 10 ? 'K' : expectedDv.toString();
+    
     return finalDv === dv;
   };
 
@@ -78,14 +95,22 @@ export default function RegistroPage() {
   const esPasswordValida = Object.values(passwordValidations).every(Boolean);
   const contraseñasCoinciden = formData.password === formData.confirmarPassword && formData.password !== "";
 
+  // ==========================================
+  // CARGA DE DATOS GEOGRÁFICOS (Protegida)
+  // ==========================================
   useEffect(() => {
     fetch(`${GATEWAY_URL}/geo/regiones`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("Error en red");
+        return res.json();
+      })
       .then(j => {
         const dataArray = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : (Array.isArray(j?.data?.data) ? j.data.data : []));
         setRegiones(dataArray);
       })
-      .catch(e => console.error("Error en regiones:", e));
+      .catch(e => {
+        console.error("Error cargando regiones. Verifica que el MS_GEO y Gateway estén corriendo:", e);
+      });
   }, [])
 
   useEffect(() => {
@@ -95,7 +120,8 @@ export default function RegistroPage() {
         .then(j => {
           const dataArray = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : (Array.isArray(j?.data?.data) ? j.data.data : []));
           setProvincias(dataArray);
-        });
+        })
+        .catch(e => console.error("Error cargando provincias:", e));
     }
   }, [formData.region])
 
@@ -106,7 +132,8 @@ export default function RegistroPage() {
         .then(j => {
           const dataArray = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : (Array.isArray(j?.data?.data) ? j.data.data : []));
           setComunas(dataArray);
-        });
+        })
+        .catch(e => console.error("Error cargando comunas:", e));
     }
   }, [formData.provincia])
 
@@ -131,6 +158,8 @@ export default function RegistroPage() {
     const nombres = partesNombre[0];
     const apellidos = partesNombre.slice(1).join(" ");
 
+    const rolDefinitivo = formData.rol === "Estudiante" ? "ALU_REG" : "FAM_APO";
+
     const payload = {
       colegioId: Number(formData.colegioId) || 1,
       rutCuerpo: rutCuerpo,
@@ -139,7 +168,10 @@ export default function RegistroPage() {
       apellidos: apellidos,
       email: formData.email.toLowerCase().trim(),
       password: formData.password,
-      role: formData.rol === "Estudiante" ? "ALU" : "FAM_APO"
+      // Le mandamos las 3 formas más comunes para que el Backend lo atrape
+      role: rolDefinitivo,
+      rolCode: rolDefinitivo,
+      rol: rolDefinitivo
     };
 
     try {
@@ -153,12 +185,12 @@ export default function RegistroPage() {
         alert("¡Registro exitoso! Ya puedes iniciar sesión.");
         window.location.href = "/login";
       } else {
-        const errorMsg = data.errors ? data.errors.map((e: any) => e.msg).join(", ") : data.message;
+        const errorMsg = data.errors ? data.errors.map((err: { msg: string }) => err.msg).join(", ") : data.message;
         alert("Error: " + (errorMsg || "Datos inválidos"));
       }
     } catch (error) {
       console.error("Error completo:", error);
-      alert("Error de conexión con el servidor.");
+      alert("Error de conexión con el servidor. Verifica tu Gateway.");
     } finally {
       setLoading(false);
     }
@@ -166,7 +198,6 @@ export default function RegistroPage() {
 
   return (
     <div className="flex min-h-screen bg-[#F8F9FA] font-sans">
-      {/* SIDEBAR CAMBIADO A AZUL MARINO (#1A1A2E) */}
       <div className="hidden lg:flex w-1/4 bg-[#1A1A2E] p-10 flex-col text-white justify-between shadow-xl">
         <div>
           <div className="bg-[#FF8FAB]/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 backdrop-blur-md border border-[#FF8FAB]/30">
@@ -264,15 +295,15 @@ export default function RegistroPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <select onChange={(e) => setFormData({...formData, region: e.target.value})} className="p-4 bg-gray-50 rounded-2xl text-sm font-medium outline-none text-[#1A1A2E] cursor-pointer border border-transparent focus:border-[#FF8FAB]">
                   <option value="">Región</option>
-                  {Array.isArray(regiones) && regiones.map((r: any) => <option key={r.regionId || r.id} value={r.regionId || r.id}>{r.nombre}</option>)}
+                  {regiones.map((r) => <option key={r.regionId || r.id} value={r.regionId || r.id}>{r.nombre}</option>)}
                 </select>
                 <select disabled={!formData.region} onChange={(e) => setFormData({...formData, provincia: e.target.value})} className="p-4 bg-gray-50 rounded-2xl text-sm font-medium outline-none disabled:opacity-40 text-[#1A1A2E] cursor-pointer border border-transparent focus:border-[#FF8FAB]">
                   <option value="">Provincia</option>
-                  {Array.isArray(provincias) && provincias.map((p: any) => <option key={p.provinciaId || p.id} value={p.provinciaId || p.id}>{p.nombre}</option>)}
+                  {provincias.map((p) => <option key={p.provinciaId || p.id} value={p.provinciaId || p.id}>{p.nombre}</option>)}
                 </select>
                 <select disabled={!formData.provincia} onChange={(e) => setFormData({...formData, comuna: e.target.value})} className="p-4 bg-gray-50 rounded-2xl text-sm font-medium outline-none disabled:opacity-40 text-[#1A1A2E] cursor-pointer border border-transparent focus:border-[#FF8FAB]">
                   <option value="">Comuna</option>
-                  {Array.isArray(comunas) && comunas.map((c: any) => <option key={c.comunaId || c.id} value={c.comunaId || c.id}>{c.nombre}</option>)}
+                  {comunas.map((c) => <option key={c.comunaId || c.id} value={c.comunaId || c.id}>{c.nombre}</option>)}
                 </select>
               </div>
             </div>

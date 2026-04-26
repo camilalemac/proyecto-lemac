@@ -23,24 +23,42 @@ export default function ApoderadoDashboard() {
     const initDashboard = async () => {
       const token = Cookies.get("auth-token")
       
-      // 🔒 VALIDACIÓN DE SEGURIDAD
       if (!token) {
         router.push("/login")
         return
       }
 
       try {
-        // Ejecutamos peticiones en paralelo: Identidad, Pagos y Académico
         const [perfil, dataPagos, dataHijos] = await Promise.all([
           authService.getMe(),
           pagosService.getMisCuotasResumen(),
           academicoService.getMisHijos()
         ])
 
-        // Verificamos que sea apoderado (FAM_APO)
-        if (!perfil.rol?.includes("APO")) {
-            router.push("/dashboard/alumno") // Redirigir si entró un alumno por error
-            return
+        // 🛡️ BUSCADOR DE ROLES INTELIGENTE (100% TypeScript, cero 'any')
+        const data = perfil as {
+          role?: string;
+          rol?: string;
+          roles?: Array<{ rol_code: string }>;
+        };
+
+        let rolesEncontrados = "";
+
+        if (data.role) rolesEncontrados += data.role;
+        if (data.rol) rolesEncontrados += data.rol;
+        
+        // Si viene la lista de la imagen, extraemos los códigos
+        if (data.roles && Array.isArray(data.roles)) {
+          rolesEncontrados += data.roles.map((r) => r.rol_code).join(",");
+        }
+
+        const cargoFinal = rolesEncontrados.toUpperCase();
+        console.log("🚀 ROL DETECTADO REAL:", cargoFinal);
+
+        // Verificamos si existe "APO" o "APD" en cualquiera de esos campos
+        if (!cargoFinal.includes("APO") && !cargoFinal.includes("APD")) {
+          router.push("/dashboard/alumno"); 
+          return;
         }
 
         setResumen({
@@ -49,9 +67,10 @@ export default function ApoderadoDashboard() {
         })
         setPupilos(dataHijos)
 
-      } catch (err: any) {
-        console.error("Error cargando dashboard apoderado:", err)
-        setErrorMsg("Error de sincronización con el servidor central.")
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Error de sincronización";
+        console.error("Error cargando dashboard apoderado:", message);
+        setErrorMsg("Error de sincronización con el servidor central.");
       } finally {
         setLoading(false)
       }
@@ -72,7 +91,7 @@ export default function ApoderadoDashboard() {
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
       
-      {/* HEADER SUPERIOR */}
+      {/* HEADER SUPERIOR CON BLOCKCHAIN PING */}
       <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm gap-6">
         <div className="flex items-center gap-5">
            <div className="p-4 bg-[#1A1A2E] rounded-3xl text-[#FF8FAB] shadow-lg"><ShieldCheck size={28} /></div>
@@ -82,7 +101,8 @@ export default function ApoderadoDashboard() {
            </div>
         </div>
         
-        <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex flex-col xl:items-end">
+        <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex flex-col xl:items-end relative overflow-hidden">
+           <div className="absolute top-0 right-0 w-2 h-2 bg-amber-400 rounded-full animate-ping m-2" />
            <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">Pasarela Transaccional</p>
            <p className="text-xs font-bold text-amber-700">Operación Protegida por Oracle Blockchain</p>
         </div>
@@ -142,24 +162,20 @@ export default function ApoderadoDashboard() {
          </Link>
       </div>
 
-      {/* SECCIÓN DE HIJOS (PUPILOS) */}
       <section className="pt-4">
          <h2 className="text-xl font-black text-[#1A1A2E] uppercase tracking-tighter flex items-center gap-3 mb-6 italic">
            <Users size={24} className="text-rose-400" /> Cargas Académicas Vigentes
          </h2>
-         
          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {pupilos.length > 0 ? pupilos.map((hijo) => (
               <div key={hijo.ALUMNO_ID} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden flex flex-col justify-between">
                  <div className="absolute left-0 top-0 bottom-0 w-2 bg-[#FF8FAB]" />
-                 
                  <div className="flex justify-between items-start mb-6 pl-4">
                     <div className="bg-rose-50 p-4 rounded-2xl text-rose-400 group-hover:scale-110 transition-transform"><Heart size={24} /></div>
                     <span className="bg-[#1A1A2E] text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-md">
                       {hijo.TIPO_RELACION}
                     </span>
                  </div>
-                 
                  <div className="pl-4">
                     <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Estudiante</p>
                     <h3 className="text-xl font-black text-[#1A1A2E] leading-tight uppercase">
@@ -169,7 +185,6 @@ export default function ApoderadoDashboard() {
                       RUT: {hijo.ALUMNO_RUT}-{hijo.ALUMNO_RUT_DV}
                     </p>
                  </div>
-                 
                  <Link href={`/dashboard/apoderado/cuotas?alumno=${hijo.ALUMNO_ID}`} className="mt-8 ml-4 w-full bg-slate-50 text-[#1A1A2E] py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-[#1A1A2E] hover:text-white transition-colors border border-slate-100">
                     Estado de Cuenta <ArrowRight size={14} />
                  </Link>
@@ -181,7 +196,6 @@ export default function ApoderadoDashboard() {
             )}
          </div>
       </section>
-
     </div>
   )
 }

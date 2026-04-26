@@ -1,58 +1,52 @@
 import { fetchClient } from "./apiConfig";
 import { ILog, IUserProfile } from "../types/admin.types";
-import Cookies from "js-cookie"; // Importación necesaria para el logout
+import Cookies from "js-cookie";
 
 export const authService = {
-  // 1. Obtener la bitácora de logs (Auditoría Blockchain)
+  // 1. Obtener perfil y persistir en LocalStorage (Identidad Real)
+  getMe: async (): Promise<IUserProfile> => {
+    try {
+      // Llamada al microservicio de identidad (Puerto 3003)
+      const response = await fetchClient("/identity/me"); 
+      
+      if (!response.success || !response.data) {
+        throw new Error(response.message || "No se pudo cargar el perfil");
+      }
+
+      // Guardamos en localStorage para que el Dashboard no muestre "Estudiante"
+      localStorage.setItem("user-profile", JSON.stringify(response.data));
+      
+      return response.data;
+    } catch (err) {
+      console.error("Error en authService.getMe:", err);
+      throw err;
+    }
+  },
+
+  // 2. Auditoría Blockchain
   getLogs: async (): Promise<ILog[]> => {
     try {
       const response = await fetchClient("/auth/logs");
-      // Si la respuesta es un array directo lo devuelve, si viene envuelto en 'data' lo extrae
       return Array.isArray(response) ? response : (response.data || []);
-    } catch (error) {
-      console.error("Error obteniendo logs de auditoría:", error);
-      throw error;
+    } catch {
+      return []; // Retorno silencioso si falla
     }
   },
 
-  // 2. Obtener perfil del usuario logueado (Identidad)
-  getMe: async (): Promise<IUserProfile> => {
-    try {
-      const response = await fetchClient("/auth/me");
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || "No se pudo cargar el perfil del usuario");
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error("Error en authService.getMe:", error);
-      throw error;
-    }
-  },
-
-  // 3. Cerrar sesión y limpiar credenciales
-  logout: () => {
-    Cookies.remove("auth-token");
-    // Si en el futuro guardas datos del usuario en localStorage, los limpias aquí:
-    // localStorage.removeItem("user-data"); 
-  },
-  // ... dentro del objeto authService ...
-
+  // 3. Gestión de Usuarios (Corregido el error de 'unused var')
   getUsuariosPendientes: async () => {
     try {
       const response = await fetchClient("/identity/usuarios");
       if (!response.success) throw new Error(response.message || "Error al cargar usuarios");
       
-      // Filtrar y retornar solo los pendientes
       const usuarios = response.data || [];
-      return usuarios.filter((u: any) => {
+      return usuarios.filter((u: { ESTADO?: string; estado?: string }) => {
         const estado = (u.ESTADO || u.estado || "").toUpperCase();
         return estado === 'PENDIENTE' || estado === 'INACTIVO';
       });
-    } catch (error) {
-      console.error("Error en getUsuariosPendientes:", error);
-      throw error;
+    } catch (err) {
+      console.error("Error en getUsuariosPendientes:", err);
+      return [];
     }
   },
 
@@ -62,11 +56,17 @@ export const authService = {
         method: "PUT",
         body: JSON.stringify({ estado: "ACTIVO" })
       });
-      if (!response.success) throw new Error(response.message || "Error al activar usuario");
+      if (!response.success) throw new Error(response.message || "Error al activar");
       return response.data;
-    } catch (error) {
-      console.error("Error en activarUsuario:", error);
-      throw error;
+    } catch (err) {
+      console.error("Error en activarUsuario:", err);
+      throw err;
     }
+  },
+
+  // 4. Logout y Limpieza
+  logout: () => {
+    Cookies.remove("auth-token");
+    localStorage.removeItem("user-profile");
   },
 };

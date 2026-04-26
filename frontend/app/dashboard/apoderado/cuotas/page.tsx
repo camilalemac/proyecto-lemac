@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { 
-  Receipt, Loader2, CreditCard, ArrowLeft, Search, CheckSquare, Square, ServerOff 
+  Receipt, Loader2, CreditCard, ArrowLeft, Search, CheckSquare, Square, AlertCircle
 } from "lucide-react" 
 import Link from "next/link"
 import Cookies from "js-cookie"
@@ -46,8 +46,9 @@ export default function MisCuotasPage() {
           const resultados = await Promise.all(promesas)
           setCuotas(resultados.flat())
         }
-      } catch (err: any) {
-        setErrorMsg(err.message || "Error al sincronizar con el nodo de pagos.")
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Error al sincronizar con el nodo de pagos.";
+        setErrorMsg(message)
       } finally {
         setLoading(false)
       }
@@ -70,8 +71,9 @@ export default function MisCuotasPage() {
       const data = await pagosService.iniciarPagoMercadoPago(payload)
       alert("Redirigiendo a MercadoPago...")
       window.location.href = data.url
-    } catch (err: any) {
-      alert(err.message)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error iniciando el pago.";
+      alert(message)
       setPaying(false)
     }
   }
@@ -110,6 +112,17 @@ export default function MisCuotasPage() {
         <Link href="/dashboard/apoderado" className="inline-flex items-center gap-3 px-6 py-3 bg-white text-gray-400 font-bold text-[10px] uppercase tracking-widest rounded-full shadow-sm hover:text-[#FF8FAB] transition-all mb-8 border border-gray-100">
           <ArrowLeft size={16} /> Volver al Inicio
         </Link>
+
+        {/* 🛡️ RENDERIZADO DEL MENSAJE DE ERROR */}
+        {errorMsg && (
+          <div className="bg-rose-50 border border-rose-100 p-8 rounded-4xl flex items-center gap-4 text-rose-600 shadow-sm mb-8">
+            <AlertCircle size={28} />
+            <div>
+              <p className="text-sm font-black uppercase tracking-tight">Fallo de Sincronización</p>
+              <p className="text-xs font-bold opacity-80">{errorMsg}</p>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* COLUMNA IZQUIERDA: LISTADO */}

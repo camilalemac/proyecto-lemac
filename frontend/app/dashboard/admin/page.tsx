@@ -2,8 +2,8 @@
 import { useState, useEffect } from "react"
 import { 
   FileText, Settings, Wallet, LayoutGrid, Loader2, 
-  History, CheckCircle2, User, LogOut, ShieldAlert, 
-  ServerOff, Database, Globe, CreditCard, CalendarDays
+  History, LogOut, ShieldAlert, ServerOff, Database, 
+  Globe, CreditCard, CalendarDays
 } from "lucide-react"
 import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
@@ -14,10 +14,24 @@ import { adminService } from "../../../services/dashboardService"
 import { formatCurrencyCLP } from "@/utils/formatters"
 import { ITransaccion } from "@/types/admin.types"
 
+// 🛡️ 1. INTERFAZ PARA ADMIN STAT CARD
+interface AdminStatCardProps {
+  title: string;
+  value: string | number;
+  icon: React.ReactNode;
+}
+
+// 🛡️ 2. INTERFAZ PARA ACTION CARD
+interface ActionCardProps {
+  title: string;
+  desc: string;
+  icon: React.ReactNode;
+  href: string;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter()
   
-  // Fíjate cómo ahora TypeScript sabe que este array es de transacciones reales
   const [transacciones, setTransacciones] = useState<ITransaccion[]>([])
   const [metrics, setMetrics] = useState({ totalRecaudado: 0, totalTransacciones: 0 })
   const [loading, setLoading] = useState(true)
@@ -28,47 +42,48 @@ export default function AdminDashboardPage() {
     rol: "Super Administrador"
   })
 
-  const fetchData = async () => {
-    const token = Cookies.get("auth-token")
-      
-    // VALIDACIÓN ESTRICTA: Si no hay token, expulsar al login inmediatamente
-    if (!token) {
-      router.push("/login")
-      return;
+  useEffect(() => {
+    // 🛡️ 3. fetchData DENTRO DEL useEffect PARA EVITAR LA ALERTA AMARILLA
+    const fetchData = async () => {
+      const token = Cookies.get("auth-token")
+        
+      // VALIDACIÓN ESTRICTA: Si no hay token, expulsar al login inmediatamente
+      if (!token) {
+        router.push("/login")
+        return;
+      }
+
+      try {
+        // 1. Perfil Real usando nuestro servicio
+        const profile = await adminService.getMe();
+        
+        setUserProfile({
+          nombre: `${profile.nombres} ${profile.apellidos}`,
+          rol: "Administrador de Sistema (Nivel 9)"
+        })
+
+        // 2. Monitoreo Global de Transacciones usando el servicio
+        const arrTransacciones = await adminService.getTransaccionesColegio(profile.colegioId || 1);
+        setTransacciones(arrTransacciones);
+        
+        // Calcular métricas
+        const total = arrTransacciones.reduce((acc, t) => acc + Number(t.montoPago || 0), 0);
+        setMetrics({ totalRecaudado: total, totalTransacciones: arrTransacciones.length });
+        
+        setConexionBackend(true);
+
+      } catch (err) {
+        console.error("Error conectando con el backend:", err);
+        setConexionBackend(false);
+        setMetrics({ totalRecaudado: 0, totalTransacciones: 0 });
+        setTransacciones([]);
+      } finally {
+        setTimeout(() => setLoading(false), 500);
+      }
     }
 
-    try {
-      // 1. Perfil Real usando nuestro servicio
-      const profile = await adminService.getMe();
-      
-      setUserProfile({
-        nombre: `${profile.nombres} ${profile.apellidos}`,
-        rol: "Administrador de Sistema (Nivel 9)"
-      })
-
-      // 2. Monitoreo Global de Transacciones usando el servicio
-      const arrTransacciones = await adminService.getTransaccionesColegio(profile.colegioId);
-      setTransacciones(arrTransacciones);
-      
-      // Calcular métricas (Ahora estamos seguros de que 'montoPago' viene limpio desde el Adapter)
-      const total = arrTransacciones.reduce((acc, t) => acc + Number(t.montoPago || 0), 0);
-      setMetrics({ totalRecaudado: total, totalTransacciones: arrTransacciones.length });
-      
-      setConexionBackend(true);
-
-    } catch (err) {
-      console.error("Error conectando con el backend:", err);
-      setConexionBackend(false);
-      setMetrics({ totalRecaudado: 0, totalTransacciones: 0 });
-      setTransacciones([]);
-    } finally {
-      setTimeout(() => setLoading(false), 500);
-    }
-  }
-
-  useEffect(() => { 
-    fetchData() 
-  }, [])
+    fetchData();
+  }, [router]); // Incluimos router por precaución de Next.js
 
   const handleLogout = () => {
     Cookies.remove("auth-token")
@@ -192,11 +207,9 @@ export default function AdminDashboardPage() {
                 {transacciones.length > 0 ? transacciones.map((t, i) => (
                   <div key={i} className="p-5 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center group hover:bg-white/10 transition-all">
                     <div>
-                      {/* Mira qué limpio queda sin el '||' gracias al Mapper */}
                       <p className="text-[10px] font-black text-[#FF8FAB] uppercase">{t.metodoPago}</p>
                       <p className="text-[11px] font-bold text-white/70 mt-1 uppercase">Folio: {t.cobroId}</p>
                     </div>
-                    {/* Reutilizamos nuestra función global de formato de dinero */}
                     <p className="font-black text-pink-400 text-sm italic">
                       +{formatCurrencyCLP(Number(t.montoPago))}
                     </p>
@@ -216,9 +229,9 @@ export default function AdminDashboardPage() {
   )
 }
 
-function AdminStatCard({ title, value, icon }: any) {
+function AdminStatCard({ title, value, icon }: AdminStatCardProps) {
   return (
-    <div className="bg-white p-7 rounded-3xl border border-pink-100 flex items-center gap-5 hover:scale-105 transition-transform shadow-sm">
+    <div className="bg-white p-7 rounded-3xl border border-pink-100 flex items-center gap-5 hover:scale-105 transition-transform">
       <div className="p-4 bg-[#0F172A] text-[#FF8FAB] rounded-2xl shadow-lg">{icon}</div>
       <div>
         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
@@ -228,7 +241,7 @@ function AdminStatCard({ title, value, icon }: any) {
   )
 }
 
-function ActionCard({ title, desc, icon, href }: any) {
+function ActionCard({ title, desc, icon, href }: ActionCardProps) {
   return (
     <Link href={href} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:border-[#FF8FAB]/30 transition-all group flex flex-col justify-between">
       <div>

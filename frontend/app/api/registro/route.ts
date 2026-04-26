@@ -39,8 +39,8 @@ export async function POST(request: Request) {
       user: responseData.data 
     }, { status: 201 });
 
-  } catch (error: any) {
-    console.error("Error crítico de conexión en Registro:", error.message);
+  } catch (error: unknown) {
+    console.error("Error crítico de conexión en Registro:", error instanceof Error ? error.message : String(error));
     return NextResponse.json(
       { error: "No se pudo establecer conexión con el servicio de autenticación." }, 
       { status: 500 }

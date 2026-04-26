@@ -8,17 +8,43 @@ import Link from "next/link"
 import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
 
-// ARQUITECTURA LIMPIA
 import { authService } from "../../../services/authService"
 import { pagosService } from "../../../services/pagosService"
 import { formatCurrencyCLP } from "../../../utils/formatters"
+import { IUserProfile } from "../../../types/admin.types"
+
+// ==========================================
+// INTERFACES 
+// ==========================================
+interface ICobro {
+  ESTADO?: string;
+  estado?: string;
+}
+
+interface IResumenFinanciero {
+  totalPendiente?: number;
+  TOTAL_PENDIENTE?: number;
+  totalPagado?: number;
+  TOTAL_PAGADO?: number;
+  cobros?: ICobro[];
+  COBROS?: ICobro[];
+}
+
+interface IUsuarioBackend {
+  perfil?: {
+    nombres?: string;
+    nombre_colegio?: string;
+  };
+  roles?: Array<{ nombre_rol?: string }>;
+  nombres?: string;
+  nombre_colegio?: string;
+}
 
 export default function AlumnoDashboardPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  
-  const [usuarioData, setUsuarioData] = useState<any>(null)
-  const [resumen, setResumen] = useState<any>(null)
+  const [usuarioData, setUsuarioData] = useState<IUserProfile | null>(null)
+  const [resumen, setResumen] = useState<IResumenFinanciero | null>(null)
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -33,18 +59,16 @@ export default function AlumnoDashboardPage() {
           authService.getMe(),
           pagosService.getMisCuotasResumen()
         ])
-
         setUsuarioData(dataDelBackendAuth)
         setResumen(cuotasData)
       } catch (error) {
         console.error("Error crítico cargando dashboard:", error)
-        Cookies.remove("auth-token")
+        authService.logout()
         router.push("/login")
       } finally {
         setLoading(false)
       }
     }
-
     loadDashboardData()
   }, [router])
 
@@ -56,22 +80,24 @@ export default function AlumnoDashboardPage() {
   )
 
   // ==========================================
-  // DATOS 100% REALES (SIN MOCKS)
+  // EXTRACCIÓN SEGURA DE DATOS
   // ==========================================
+  const datosBackend = usuarioData as unknown as IUsuarioBackend;
+  const perfil = datosBackend?.perfil || datosBackend;
   
-  // 1. Identidad Automática
-  const nombresCompletos = usuarioData?.perfil?.nombres || "Estudiante";
-  const primerNombre = nombresCompletos.split(' ')[0];
-  const nombreRol = usuarioData?.roles?.[0]?.nombre_rol || "Usuario del Sistema";
-  
-  // ¡Aquí entra el nombre de tu colegio directamente de Oracle!
-  const nombreColegioReal = usuarioData?.perfil?.nombre_colegio || "Institución Educativa";
+  // Limpiamos los textos duros (Si no hay dato, queda en blanco temporalmente en vez de mentir)
+  const primerNombre = perfil?.nombres?.split(' ')[0] || "";
+  const nombreRol = datosBackend?.roles?.[0]?.nombre_rol || "";
+  const nombreColegioReal = perfil?.nombre_colegio || "";
 
-  // 2. Finanzas Automáticas
+  // Datos Financieros dinámicos
   const deudaTotal = resumen?.totalPendiente || resumen?.TOTAL_PENDIENTE || 0;
-  const pagosRealizados = resumen?.totalPagado || resumen?.TOTAL_PAGADO || resumen?.cuotasPagadas || 0;
-  const listaCobros = resumen?.cobros || resumen?.COBROS || [];
-  const cuotasPendientes = listaCobros.filter((c: any) => c.ESTADO === 'PENDIENTE' || c.estado === 'PENDIENTE').length;
+  const pagosRealizados = resumen?.totalPagado || resumen?.TOTAL_PAGADO || 0;
+  const listaCobros: ICobro[] = resumen?.cobros || resumen?.COBROS || [];
+  
+  const cuotasPendientes = listaCobros.filter((c: ICobro) => 
+    (c.ESTADO || c.estado)?.toUpperCase() === 'PENDIENTE'
+  ).length;
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 max-w-7xl mx-auto pb-10">
@@ -87,26 +113,23 @@ export default function AlumnoDashboardPage() {
           </p>
         </div>
         
-        {/* TARJETAS DE IDENTIDAD (ROL Y COLEGIO) */}
-        <div className="flex gap-4">
-          <div className="flex items-center gap-4 bg-slate-50 p-3 pr-6 rounded-3xl shadow-inner border border-slate-100">
-             <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 shadow-sm border border-slate-100">
-                <UserCircle size={24} />
-             </div>
-             <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Rol</p>
-                <p className="text-xs font-black text-[#1A1A2E] mt-1 uppercase tracking-tight">{nombreRol}</p>
-             </div>
+        {/* Tarjetas de Institución y Rol */}
+        <div className="flex gap-4 items-center">
+          <div className="hidden lg:flex items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+             <UserCircle className="text-slate-400" size={20} />
+             <p className="text-[10px] font-black text-slate-500 uppercase tracking-tight">{nombreRol}</p>
           </div>
 
-          <div className="flex items-center gap-4 bg-[#FDF2F5] p-3 pr-6 rounded-3xl shadow-inner border border-[#FF8FAB]/20 sm:flex">
-             <div className="w-12 h-12 bg-[#FF8FAB] rounded-2xl flex items-center justify-center text-white shadow-md">
-                <GraduationCap size={24} />
-             </div>
-             <div>
-                <p className="text-[9px] font-black text-[#FF8FAB] uppercase tracking-widest leading-none">Institución</p>
-                <p className="text-xs font-black text-[#1A1A2E] mt-1 uppercase tracking-tight max-w-37.5 truncate">{nombreColegioReal}</p>
-             </div>
+          <div className="flex items-center gap-5 bg-slate-50 p-4 rounded-3xl shadow-inner border border-slate-100">
+            <div className="w-14 h-14 bg-[#1A1A2E] rounded-2xl flex items-center justify-center text-[#FF8FAB] shadow-md">
+              <GraduationCap size={28} />
+            </div>
+            <div className="pr-4">
+              <p className="text-[10px] font-black text-slate-400 uppercase leading-none tracking-widest">Institución</p>
+              <p className="text-sm font-black text-[#1A1A2E] mt-1 uppercase tracking-tight max-w-37.5 truncate">
+                {nombreColegioReal}
+              </p>
+            </div>
           </div>
         </div>
       </header>
@@ -127,7 +150,7 @@ export default function AlumnoDashboardPage() {
         </div>
       </div>
 
-      {/* ACCESOS */}
+      {/* ACCESOS DIRECTOS */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <MenuAction title="Mis Cuotas y Pagos" desc="Visualiza tu estado de cuenta, descarga comprobantes y paga mensualidades pendientes." href="/dashboard/alumno/cuotas" icon={<Receipt size={32} />} />
         <MenuAction title="Historial Blockchain" desc="Consulta el registro inmutable de todas tus transacciones realizadas en el sistema." href="/dashboard/alumno/historial" icon={<History size={32} />} />
@@ -137,7 +160,9 @@ export default function AlumnoDashboardPage() {
   )
 }
 
-function StatCard({ title, value, icon, color }: any) {
+// Componentes con Props Tipadas
+interface IStatCard { title: string; value: string; icon: React.ReactNode; color: string; }
+function StatCard({ title, value, icon, color }: IStatCard) {
   return (
     <div className="bg-white p-8 rounded-[3.5rem] shadow-sm border border-slate-100 flex items-center gap-6 group hover:shadow-xl hover:border-slate-200 transition-all duration-300">
       <div className={`p-6 ${color} text-white rounded-3xl shadow-lg group-hover:scale-110 transition-transform`}>{icon}</div>
@@ -149,7 +174,8 @@ function StatCard({ title, value, icon, color }: any) {
   )
 }
 
-function MenuAction({ title, desc, href, icon }: any) {
+interface IMenuAction { title: string; desc: string; href: string; icon: React.ReactNode; }
+function MenuAction({ title, desc, href, icon }: IMenuAction) {
   return (
     <Link href={href} className="bg-white p-10 lg:p-12 rounded-[4rem] border border-slate-100 flex gap-8 items-center group hover:border-[#FF8FAB]/40 hover:shadow-xl transition-all duration-300">
       <div className="p-6 bg-slate-50 text-slate-400 rounded-4xl group-hover:bg-[#1A1A2E] group-hover:text-[#FF8FAB] transition-all shadow-sm shrink-0">{icon}</div>

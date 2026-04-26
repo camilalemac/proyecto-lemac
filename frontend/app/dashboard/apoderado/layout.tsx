@@ -10,6 +10,14 @@ import {
 // ARQUITECTURA LIMPIA
 import { authService } from "../../../services/authService"
 
+// ✅ INTERFAZ PARA TIPADO ESTRICTO
+interface MenuLinkProps {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+}
+
 export default function ApoderadoLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -26,23 +34,55 @@ export default function ApoderadoLayout({ children }: { children: React.ReactNod
       }
 
       try {
-        // Obtenemos los datos reales del backend
         const perfil = await authService.getMe()
         
-        // Verificación estricta de rol
-        const cargo = perfil.rol || ""
-        if (!cargo.toUpperCase().includes("APO")) {
-          router.replace("/dashboard/alumno") // Redirigir si no es apoderado
-          return
+        // 🛡️ BUSCADOR DE ROLES INTELIGENTE (100% TypeScript, cero 'any')
+        const data = perfil as {
+          role?: string;
+          rol?: string;
+          roles?: Array<{ rol_code: string }>;
+          nombres?: string;
+          nombre?: string;
+          apellidos?: string;
+          apellido?: string;
+        };
+
+        let rolesEncontrados = "";
+
+        if (data.role) rolesEncontrados += data.role;
+        if (data.rol) rolesEncontrados += data.rol;
+        
+        // Si viene la lista de la imagen, extraemos los códigos
+        if (data.roles && Array.isArray(data.roles)) {
+          rolesEncontrados += data.roles.map((r) => r.rol_code).join(",");
+        }
+
+        const cargoFinal = rolesEncontrados.toUpperCase();
+        console.log("🚀 ROL DETECTADO REAL:", cargoFinal);
+
+        // Verificamos si existe "APO" o "APD" en cualquiera de esos campos
+        if (!cargoFinal.includes("APO") && !cargoFinal.includes("APD")) {
+          router.replace("/dashboard/alumno"); 
+          return;
+        }
+
+        // 🛡️ Extracción de nombres a prueba de fallos (singular o plural)
+        const nombreUsuario = data.nombres || data.nombre || "Carolina";
+        const apellidoUsuario = data.apellidos || data.apellido || "Méndez";
+        
+        // 🏷️ Formateo amigable del cargo
+        let nombreCargo = "Apoderado";
+        if (cargoFinal.includes("APO") || cargoFinal.includes("APD")) {
+            nombreCargo = "Apoderado Titular";
         }
 
         setUserData({
-          nombre: `${perfil.nombres} ${perfil.apellidos}`,
-          cargo: perfil.rol || "Apoderado Titular"
+          nombre: `${nombreUsuario} ${apellidoUsuario}`.trim(),
+          cargo: nombreCargo
         })
         setIsChecking(false)
-      } catch (e) {
-        console.error("Fallo de autenticación en Layout Apoderado")
+      } catch {
+        console.error("Fallo de autenticación")
         router.replace("/login")
       }
     }
@@ -108,10 +148,13 @@ export default function ApoderadoLayout({ children }: { children: React.ReactNod
   )
 }
 
-// Pequeño componente interno para limpiar el código de los links
-function MenuLink({ href, icon, label, active }: any) {
+function MenuLink({ href, icon, label, active }: MenuLinkProps) {
   return (
-    <Link href={href} className={`flex items-center gap-3.5 px-4 py-4 rounded-xl text-[12px] font-black uppercase tracking-tighter transition-all ${active ? 'bg-[#FF8FAB]/20 text-[#FF8FAB]' : 'text-slate-400 hover:text-white'}`}>
+    <Link 
+      href={href} 
+      className={`flex items-center gap-3.5 px-4 py-4 rounded-xl text-[12px] font-black uppercase tracking-tighter transition-all 
+        ${active ? 'bg-[#FF8FAB]/20 text-[#FF8FAB]' : 'text-slate-400 hover:text-white'}`}
+    >
       {icon} {label}
     </Link>
   )

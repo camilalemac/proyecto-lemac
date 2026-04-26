@@ -1,13 +1,12 @@
 "use client"
 import { useState, useEffect } from "react"
-import { ArrowLeft, Loader2, CheckCircle2, Clock, Receipt, Tag, ChevronRight, ServerOff } from "lucide-react"
+import { ArrowLeft, Loader2, CheckCircle2, Clock, Receipt, Tag, ServerOff } from "lucide-react"
 import Link from "next/link"
 import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
 
-// ARQUITECTURA LIMPIA (Asegúrate de que las rutas relativas sean correctas según tu carpeta)
 import { pagosService } from "../../../../services/pagosService"
-import { ICobroAlumno, IResumenCuotas, IConceptoEspecial } from "../../../../types/admin.types"
+import { ICobroAlumno, IResumenCuotas } from "../../../../types/admin.types"
 import { formatCurrencyCLP } from "../../../../utils/formatters"
 
 export default function CuotasPage() {
@@ -19,57 +18,44 @@ export default function CuotasPage() {
     totalPendiente: 0,
     totalPagado: 0
   })
-  const [conceptosEspeciales, setConceptosEspeciales] = useState<IConceptoEspecial[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const token = Cookies.get("auth-token")
-        
-        // 🔒 BLOQUEO DE SEGURIDAD
         if (!token) {
           router.push("/login")
           return
         }
 
-        // 1. Petición de Cuotas usando el servicio unificado
+        // Solo pedimos el resumen de cuotas (Lo que el alumno realmente necesita ver)
         const resumen = await pagosService.getMisCuotasResumen()
         setData(resumen)
 
-        // 2. Petición de Conceptos Extraordinarios
-        // Nota: Aquí pedimos los conceptos generales y filtramos los "baratos" o especiales
-        const todosLosConceptos = await pagosService.getMetodos() 
-        // Filtramos para la barra lateral (conceptos de bajo costo o tipo extraordinario)
-        const especiales = (todosLosConceptos as any[]).filter((c: any) => 
-          c.TIPO_COBRO === 'EXTRAORDINARIO' || (c.MONTO_BASE || c.montoBase) <= 5000
-        )
-        setConceptosEspeciales(especiales)
-
-      } catch (error: any) {
-        console.error("Error en Portal de Cuotas:", error.message)
-        setErrorMsg(error.message || "Error de comunicación con el servidor de pagos.")
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : "Error de comunicación con el servidor de pagos."
+        console.error("Error en Portal de Cuotas:", msg)
+        setErrorMsg(msg)
       } finally {
         setLoading(false)
       }
     }
-
     loadData()
   }, [router])
 
-  // Función para procesar el pago real (Webpay / Khipu)
   const handlePagar = async (cobroId: number) => {
     try {
       const result = await pagosService.iniciarPago(cobroId)
       alert("Iniciando conexión segura con pasarela de pago...")
-      // Redirección externa al motor de pagos (Webpay/MercadoPago)
       window.location.href = result.url
-    } catch (e: any) {
-      alert(e.message || "No se pudo iniciar el proceso de pago.")
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "No se pudo iniciar el proceso de pago.")
     }
   }
 
-  const cuotasFiltradas = data.cobros.filter((c: ICobroAlumno) => {
+  const listaCobros = data?.cobros || [];
+  const cuotasFiltradas = listaCobros.filter((c: ICobroAlumno) => {
     if (filter === 'TODAS') return true
     return c.ESTADO === filter
   })
@@ -98,11 +84,11 @@ export default function CuotasPage() {
           <div className="flex gap-4 mt-8 md:mt-0">
              <div className="bg-white/5 p-6 rounded-4xl border border-white/10 backdrop-blur-sm text-center">
                 <p className="text-[9px] font-black text-gray-400 uppercase mb-1 tracking-widest">Deuda Pendiente</p>
-                <p className="text-2xl font-black text-[#FF8FAB]">{formatCurrencyCLP(data.totalPendiente)}</p>
+                <p className="text-2xl font-black text-[#FF8FAB]">{formatCurrencyCLP(data?.totalPendiente || 0)}</p>
              </div>
              <div className="bg-white/5 p-6 rounded-4xl border border-white/10 backdrop-blur-sm text-center">
                 <p className="text-[9px] font-black text-gray-400 uppercase mb-1 tracking-widest">Total Pagado</p>
-                <p className="text-2xl font-black text-emerald-400">{formatCurrencyCLP(data.totalPagado)}</p>
+                <p className="text-2xl font-black text-emerald-400">{formatCurrencyCLP(data?.totalPagado || 0)}</p>
              </div>
           </div>
         </div>
@@ -178,19 +164,10 @@ export default function CuotasPage() {
                     <Tag size={24} />
                 </div>
                 <h3 className="text-2xl font-black uppercase leading-tight tracking-tighter mb-2">Cobros Directos</h3>
-                <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mb-10">Conceptos extraordinarios</p>
+                <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mb-10">Próximamente</p>
                 
                 <div className="space-y-4">
-                   {conceptosEspeciales.length > 0 ? conceptosEspeciales.map((conc: IConceptoEspecial) => (
-                      <SpecialItem 
-                        key={conc.CONCEPTO_ID} 
-                        label={conc.NOMBRE} 
-                        price={formatCurrencyCLP(conc.MONTO_BASE)} 
-                        onClick={() => handlePagar(conc.CONCEPTO_ID)}
-                      />
-                   )) : (
                     <p className="text-[10px] font-bold opacity-40 text-center uppercase py-4">No hay conceptos disponibles</p>
-                   )}
                 </div>
               </div>
               <div className="absolute -bottom-10 -right-10 opacity-5 rotate-12 group-hover:rotate-0 transition-all duration-1000">
@@ -200,20 +177,5 @@ export default function CuotasPage() {
         </aside>
       </main>
     </div>
-  )
-}
-
-function SpecialItem({ label, price, onClick }: any) {
-  return (
-    <button 
-      onClick={onClick}
-      className="w-full flex items-center justify-between p-5 bg-white/20 hover:bg-white/40 rounded-3xl transition-all border border-white/10 group"
-    >
-      <span className="text-[10px] font-black uppercase tracking-tight text-left max-w-[60%]">{label}</span>
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] font-black bg-[#1A1A2E] text-white px-3 py-1.5 rounded-xl shadow-lg">{price}</span>
-        <ChevronRight size={14} className="text-[#1A1A2E]/40 group-hover:translate-x-1 transition-transform" />
-      </div>
-    </button>
   )
 }

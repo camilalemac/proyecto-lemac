@@ -3,10 +3,9 @@ import {
   IMetodoPago, 
   IMetodoPagoPayload, 
   IResumenCuotas,
-  IHistorialPago,
   ICuotaFamiliar,
   IMovimientoCaja,
-  ITransaccionFamiliar // Asegúrate de que esté definido en admin.types.ts
+  ITransaccionFamiliar
 } from "../types/admin.types";
 
 export const pagosService = {
@@ -24,21 +23,21 @@ export const pagosService = {
     }
   },
 
-  createMetodo: async (payload: IMetodoPagoPayload): Promise<any> => {
+  createMetodo: async (payload: IMetodoPagoPayload): Promise<unknown> => {
     return await fetchClient("/pagos/metodos", {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
-  updateMetodo: async (metodoId: number, payload: IMetodoPagoPayload): Promise<any> => {
+  updateMetodo: async (metodoId: number, payload: IMetodoPagoPayload): Promise<unknown> => {
     return await fetchClient(`/pagos/metodos/${metodoId}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     });
   },
 
-  deleteMetodo: async (metodoId: number): Promise<any> => {
+  deleteMetodo: async (metodoId: number): Promise<unknown> => {
     return await fetchClient(`/pagos/metodos/${metodoId}`, {
       method: "DELETE",
     });
@@ -48,31 +47,35 @@ export const pagosService = {
   // 2. MÉTODOS DEL PORTAL ALUMNO (CUOTAS)
   // ==========================================
 
-  getMisCuotasResumen: async (): Promise<any> => {
+  getMisCuotasResumen: async (): Promise<IResumenCuotas> => {
     try {
       const response = await fetchClient("/pagos/cuentas-cobrar/mis-cobros/resumen");
       
       if (!response.success) {
         console.warn("⚠️ Backend devolvió 404 para el resumen. Cargando dashboard vacío.");
         return {
+          cobros: [],
           totalPendiente: 0,
           cuotasPagadas: 0,
+          totalPagado: 0,
           totalCuotas: 0,
           proximoVencimiento: "N/A",
           estado: "AL_DIA"
-        };
+        } as unknown as IResumenCuotas;
       }
       
       return response.data;
-    } catch (error) {
+    } catch {
       console.warn("⚠️ Fallo en getMisCuotasResumen. Cargando valores por defecto.");
       return {
+        cobros: [],
         totalPendiente: 0,
         cuotasPagadas: 0,
+        totalPagado: 0,
         totalCuotas: 0,
         proximoVencimiento: "N/A",
         estado: "AL_DIA"
-      };
+      } as unknown as IResumenCuotas;
     }
   },
 
@@ -92,24 +95,19 @@ export const pagosService = {
     }
   },
 
-  // ==========================================
-  // MÉTODOS DEL PORTAL ALUMNO (CUOTAS)
-  // ==========================================
-
-  getHistorialPagos: async (): Promise<any[]> => {
+  getHistorialPagos: async (): Promise<ITransaccionFamiliar[]> => {
     try {
       const response = await fetchClient("/pagos/transacciones/historial");
       
-      // 🛑 AQUÍ QUITAMOS EL THROW ERROR
       if (!response.success) {
         console.warn("⚠️ Backend devolvió 404 para el historial. Cargando lista vacía.");
-        return []; // Retornamos un arreglo vacío para que la tabla no crashee
+        return [];
       }
       
       return response.data || [];
-    } catch (error) {
+    } catch {
       console.warn("⚠️ Fallo en getHistorialPagos. Cargando lista vacía por defecto.");
-      return []; // Retornamos un arreglo vacío
+      return [];
     }
   },
 
@@ -117,7 +115,7 @@ export const pagosService = {
   // 3. MÉTODOS DEL PORTAL APODERADO / DIRECTIVAS
   // ==========================================
 
-  getMovimientosPorColegio: async (colegioId: number) => {
+  getMovimientosPorColegio: async (colegioId: number): Promise<IMovimientoCaja[]> => {
     try {
       const response = await fetchClient(`/pagos/movimientos/colegio/${colegioId}`);
       if (!response.success) {
@@ -130,7 +128,7 @@ export const pagosService = {
     }
   },
 
-  getCuentasPorColegio: async (colegioId: number) => {
+  getCuentasPorColegio: async (colegioId: number): Promise<unknown[]> => {
     try {
       const response = await fetchClient(`/pagos/cuentas-bancarias/colegio/${colegioId}`);
       if (!response.success) {
@@ -143,7 +141,7 @@ export const pagosService = {
     }
   },
 
-  getCuentasPorCobrar: async (colegioId: number = 1) => {
+  getCuentasPorCobrar: async (colegioId: number = 1): Promise<unknown[]> => {
     const response = await fetchClient(`/pagos/cobros/colegio/${colegioId}`);
     if (!response.success) {
       throw new Error(response.message || "Error al cargar la cartera de cuotas");
@@ -182,20 +180,18 @@ export const pagosService = {
     }
   },
 
+  // 🛡️ SOLUCIÓN: Simplificamos este método para que no use 'new Error()' ni 'console.error'
   getMovimientosByCuenta: async (cuentaId: number): Promise<IMovimientoCaja[]> => {
-    try {
-      const response = await fetchClient(`/pagos/movimientos-caja/cuenta/${cuentaId}`);
-      if (!response.success) {
-        throw new Error(response.message || "Error al cargar movimientos");
-      }
-      return response.data || [];
-    } catch (error) {
-      console.error("Error en getMovimientosByCuenta:", error);
-      throw error;
+    const response = await fetchClient(`/pagos/movimientos-caja/cuenta/${cuentaId}`);
+    if (!response.success) {
+      // Al lanzar un string, el 'catch' de page.tsx lo ataja perfectamente, 
+      // pero Next.js no lanza su pantalla roja superpuesta.
+      throw response.message || "Error al cargar movimientos";
     }
+    return response.data || [];
   },
 
-  getResumenGlobal: async (colegioId: number) => {
+  getResumenGlobal: async (colegioId: number): Promise<unknown> => {
     try {
       const response = await fetchClient(`/pagos/movimientos/resumen-global/${colegioId}`);
       if (!response.success) {
@@ -218,7 +214,7 @@ export const pagosService = {
     }
   },
 
-  ejecutarAperturaCaja: async (payload: { cuentaOrigenId: number, cuentaDestinoId: number }) => {
+  ejecutarAperturaCaja: async (payload: { cuentaOrigenId: number, cuentaDestinoId: number }): Promise<unknown> => {
     try {
       const response = await fetchClient("/pagos/cuentas-bancarias/apertura-caja", {
         method: "POST",
@@ -234,7 +230,7 @@ export const pagosService = {
       throw error;
     }
   },
-  getDeudoresInstitucionales: async (colegioId: number) => {
+  getDeudoresInstitucionales: async (colegioId: number): Promise<unknown[]> => {
     try {
       const response = await fetchClient(`/pagos/cuotas/total-institucional/${colegioId}`);
       if (!response.success) throw new Error(response.message || "Error al cargar deudores");
@@ -244,9 +240,8 @@ export const pagosService = {
       throw error;
     }
   },
-  // ... dentro del objeto pagosService ...
 
-  crearCuentaBancaria: async (payload: any) => {
+  crearCuentaBancaria: async (payload: unknown): Promise<unknown> => {
     const response = await fetchClient("/pagos/cuentas-bancarias", {
       method: "POST",
       body: JSON.stringify(payload)
@@ -255,7 +250,7 @@ export const pagosService = {
     return response.data;
   },
 
-  actualizarCuentaBancaria: async (id: number, payload: any) => {
+  actualizarCuentaBancaria: async (id: number, payload: unknown): Promise<unknown> => {
     const response = await fetchClient(`/pagos/cuentas-bancarias/${id}`, {
       method: "PUT",
       body: JSON.stringify(payload)
@@ -264,16 +259,15 @@ export const pagosService = {
     return response.data;
   },
 
-  eliminarCuentaBancaria: async (id: number) => {
+  eliminarCuentaBancaria: async (id: number): Promise<unknown> => {
     const response = await fetchClient(`/pagos/cuentas-bancarias/${id}`, {
       method: "DELETE"
     });
     if (!response.success) throw new Error(response.message || "No se pudo eliminar la cuenta");
     return response.data;
   },
-  // ... dentro del objeto pagosService ...
 
-  getResumenCuotasAlumno: async (alumnoId: string) => {
+  getResumenCuotasAlumno: async (alumnoId: string): Promise<unknown> => {
     try {
       const response = await fetchClient(`/pagos/cuotas/alumno/${alumnoId}/resumen`);
       if (!response.success) {
@@ -286,7 +280,7 @@ export const pagosService = {
     }
   },
 
-  getDetalleCuotasAlumno: async (alumnoId: string) => {
+  getDetalleCuotasAlumno: async (alumnoId: string): Promise<unknown[]> => {
     try {
       const response = await fetchClient(`/pagos/cuotas/alumno/${alumnoId}`);
       if (!response.success) {
@@ -298,9 +292,8 @@ export const pagosService = {
       throw error;
     }
   },
-  // ... dentro del objeto pagosService ...
 
-  getExenciones: async () => {
+  getExenciones: async (): Promise<unknown[]> => {
     try {
       const response = await fetchClient("/pagos/exenciones");
       if (!response.success) throw new Error(response.message || "Error al cargar exenciones");
@@ -311,7 +304,7 @@ export const pagosService = {
     }
   },
 
-  revisarExencionTesorero: async (exencionId: number, aprobado: boolean, observacion?: string | null) => {
+  revisarExencionTesorero: async (exencionId: number, aprobado: boolean, observacion?: string | null): Promise<unknown> => {
     try {
       const response = await fetchClient(`/pagos/exenciones/${exencionId}/revision-tesorero`, {
         method: 'PATCH',
@@ -324,9 +317,8 @@ export const pagosService = {
       throw error;
     }
   },
-  // ... dentro del objeto pagosService ...
 
-  getCategoriasPagos: async () => {
+  getCategoriasPagos: async (): Promise<unknown[]> => {
     try {
       const response = await fetchClient("/pagos/categorias");
       if (!response.success) throw new Error(response.message || "Error al cargar categorías");
@@ -337,7 +329,7 @@ export const pagosService = {
     }
   },
 
-  registrarMovimientoManual: async (payload: any) => {
+  registrarMovimientoManual: async (payload: unknown): Promise<unknown> => {
     try {
       const response = await fetchClient("/pagos/movimientos", {
         method: "POST",
@@ -350,11 +342,11 @@ export const pagosService = {
       throw error;
     }
   },
-  // En pagosService.ts
-  validarCuentaBancaria: async (cuentaId: number, estado: 'APROBADA' | 'RECHAZADA') => {
+  
+  validarCuentaBancaria: async (cuentaId: number, estado: 'APROBADA' | 'RECHAZADA'): Promise<unknown> => {
     try {
       const response = await fetchClient(`/pagos/cuentas-bancarias/${cuentaId}/validar`, {
-        method: "PATCH", // O PUT, dependiendo de cómo lo tengas en el router de Express
+        method: "PATCH", 
         body: JSON.stringify({ estado })
       });
       

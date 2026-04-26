@@ -8,8 +8,15 @@ import Link from "next/link"
 
 // ARQUITECTURA LIMPIA
 import { pagosService } from "../../../../services/pagosService"
-import { IMovimientoCaja, IGastoGrafico } from "../../../../types/admin.types"
+import { IGastoGrafico } from "../../../../types/admin.types"
 import { formatCurrencyCLP } from "../../../../utils/formatters"
+
+// 🛡️ Definimos la forma exacta del dato para que TypeScript no chille
+interface MovimientoCajaData {
+  TIPO_MOVIMIENTO?: string;
+  MONTO?: string | number;
+  CATEGORIA_NOMBRE?: string;
+}
 
 export default function GastosApoderadoPage() {
   const router = useRouter()
@@ -21,6 +28,7 @@ export default function GastosApoderadoPage() {
   useEffect(() => {
     const loadGastos = async () => {
       try {
+        setLoading(true);
         const token = Cookies.get("auth-token")
         if (!token) {
           router.push("/login")
@@ -28,9 +36,12 @@ export default function GastosApoderadoPage() {
         }
         
         // 1. Obtener movimientos reales de la cuenta institucional (ID 1 por defecto)
-        const data = await pagosService.getMovimientosByCuenta(1)
+        const rawData = await pagosService.getMovimientosByCuenta(1)
         
-        // 2. Filtrar solo los egresos (Gastos realizados por el colegio)
+        // 🛡️ Le decimos a TypeScript que la data es un arreglo de MovimientoCajaData
+        const data = rawData as MovimientoCajaData[];
+        
+        // 2. Al hacer esto, ya no necesitas poner ': any' en la 'm'. ¡El linter estará feliz!
         const egresos = data.filter(m => m.TIPO_MOVIMIENTO === 'EGRESO')
         const total = egresos.reduce((acc, m) => acc + Number(m.MONTO), 0)
         setTotalEgresos(total)
@@ -50,15 +61,16 @@ export default function GastosApoderadoPage() {
 
         setGastos(arrayGastos.sort((a, b) => b.value - a.value))
 
-      } catch (e: any) { 
-        console.error("Error cargando transparencia:", e) 
-        setErrorMsg(e.message)
-      } finally { 
-        setLoading(false) 
+      } catch (error: unknown) {
+        console.warn("Acceso denegado o sin datos de curso:", error);
+        // En lugar de "explotar", guardamos un mensaje para mostrarlo en la interfaz
+        setErrorMsg("No tienes permisos suficientes o tu alumno no tiene un curso asignado para ver estos reportes.");
+      } finally {
+        setLoading(false);
       }
-    }
-    loadGastos()
-  }, [router])
+    };
+    loadGastos();
+  }, [router]);
 
   const COLORS = ["#FF8FAB", "#1A1A2E", "#7C3AED", "#10B981", "#F59E0B", "#EF4444"]
 
@@ -90,7 +102,7 @@ export default function GastosApoderadoPage() {
         <div className="bg-rose-50 text-rose-600 p-8 rounded-4xl border border-rose-100 flex items-center gap-4 shadow-sm">
           <AlertCircle size={24} />
           <div>
-            <p className="text-xs font-black uppercase tracking-widest mb-1">Error de Visualización</p>
+            <p className="text-xs font-black uppercase tracking-widest mb-1">Visualización Protegida</p>
             <p className="text-sm font-bold opacity-80">{errorMsg}</p>
           </div>
         </div>

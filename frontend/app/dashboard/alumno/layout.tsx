@@ -5,11 +5,10 @@ import Cookies from "js-cookie"
 import Link from "next/link"
 import { 
   LayoutDashboard, Receipt, History, ShieldCheck,
-  LogOut, Crown, Users, ArrowLeft, ArrowRightLeft,
-  PieChart, BarChart3, FileText, Edit3, Wallet, Loader2
+  LogOut, Users, ArrowLeft,
+  FileText, Wallet, Loader2
 } from "lucide-react"
 
-// ARQUITECTURA LIMPIA
 import { authService } from "../../../services/authService"
 
 export default function AlumnoLayout({ children }: { children: React.ReactNode }) {
@@ -21,17 +20,33 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
   useEffect(() => {
     const checkAuth = async () => {
       const token = Cookies.get("auth-token")
+      
+      // Si no hay token, directo al login sin preguntar
       if (!token) {
         router.push("/login")
         return
       }
 
       try {
-        // Usamos nuestro servicio para obtener el cargo real desde el backend
+        // 1. Cargamos de caché local para que la pantalla cargue rápido
+        const cached = localStorage.getItem("user-profile");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setUserCargo(parsed.rol || parsed.roles?.[0]?.rol_code || "ALU_REG");
+        }
+
+        // 2. Validamos con el backend
         const perfil = await authService.getMe()
-        setUserCargo(perfil.rol || "Alumno")
-      } catch (e) {
-        console.error("Sesión inválida en Layout")
+        
+        // Extraemos el rol correctamente basado en cómo lo devuelve tu Oracle
+        const rolReal = perfil.rol || perfil.roles?.[0]?.rol_code || "ALU_REG"
+        setUserCargo(rolReal)
+        
+      } catch {
+        console.warn("🛡️ Seguridad: Sesión expirada o token inválido. Limpiando datos...")
+        // Limpiamos los datos viejos para que no haya bucles
+        Cookies.remove("auth-token")
+        localStorage.removeItem("user-profile")
         router.push("/login")
       } finally {
         setLoading(false)
@@ -71,7 +86,6 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
     menuActivo = menuTesorero
     tituloPortal = "TESORERÍA"
   } 
-  // ... Agregar aquí los otros IF para Presidente/CEAL cuando los crees
 
   // Determinar ruta para el botón de "Entrar a Gestión"
   if (esTesorero) rutaGestion = "/dashboard/alumno/tesorero"
@@ -80,6 +94,7 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
 
   const handleLogout = () => {
     Cookies.remove("auth-token")
+    localStorage.removeItem("user-profile")
     router.push("/login")
   }
 
@@ -144,7 +159,14 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
   )
 }
 
-function NavLink({ href, children, active, isSpecial = false }: any) {
+interface NavLinkProps {
+  href: string;
+  children: React.ReactNode;
+  active: boolean;
+  isSpecial?: boolean;
+}
+
+function NavLink({ href, children, active, isSpecial = false }: NavLinkProps) {
   return (
     <Link 
       href={href} 

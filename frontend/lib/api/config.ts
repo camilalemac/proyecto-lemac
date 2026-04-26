@@ -1,8 +1,9 @@
 /**
- * Base de API detrás del gateway. En `.env.local`: `NEXT_PUBLIC_API_URL=http://localhost:3007/api/v1`
+ * Base de API detrás del gateway. En `.env.local`: `NEXT_PUBLIC_GATEWAY_URL=http://localhost:3002/api/v1`
  */
 export function getApiBaseUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:3007/api/v1";
+  // Ahora busca la variable correcta y por defecto apunta al Gateway real (3002)
+  const raw = process.env.NEXT_PUBLIC_GATEWAY_URL?.trim() || "http://localhost:3002/api/v1";
   return raw.replace(/\/$/, "");
 }
 
@@ -10,5 +11,5 @@ export function getApiBaseUrl(): string {
 export function getGatewayOrigin(): string {
   const base = getApiBaseUrl();
   const stripped = base.replace(/\/api\/v1\/?$/i, "");
-  return stripped || "http://localhost:3007";
+  return stripped || "http://localhost:3002";
 }

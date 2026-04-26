@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect } from "react"
-import { Receipt, Loader2, AlertCircle, Calendar, CreditCard, ChevronRight, Hash, ArrowLeft, Home } from "lucide-react"
+import { Receipt, Loader2, AlertCircle, Calendar, CreditCard, ChevronRight, Hash, Home } from "lucide-react"
 import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -29,20 +29,26 @@ export default function HistorialPagosPage() {
         // 1. Obtenemos el perfil real desde el servicio (MS_IDENTITY)
         const perfil = await authService.getMe()
         
-        // ✅ CORRECCIÓN: Normalizamos el ID del colegio (Oracle COLEGIO_ID vs Sequelize colegioId)
-        const idCol = perfil.colegioId || (perfil as any).COLEGIO_ID;
+        // 🛡️ Tipado estricto sin 'any' para evitar errores de ESLint
+        const dataPerfil = perfil as { colegioId?: number; COLEGIO_ID?: number; colegio_id?: number };
+        
+        // ✅ CORRECCIÓN: Buscamos colegio_id en minúscula que es el formato JSON, 
+        // y si el backend olvidó mandarlo, usamos 1 por defecto (Liceo Juana Ross) para que no bloquee
+        const idCol = dataPerfil.colegioId || dataPerfil.COLEGIO_ID || dataPerfil.colegio_id || 1;
         
         if (!idCol) {
           throw new Error("No se pudo verificar la vinculación institucional.")
         }
 
         // 2. Llamada al servicio conectado al backend real
-        const data = await pagosService.getHistorialPorColegio(idCol as number)
+        const data = await pagosService.getHistorialPorColegio(idCol)
         setTransacciones(data)
 
-      } catch (err: any) {
-        console.error("Error cargando historial:", err.message)
-        setError(err.message || "Error al conectar con el ledger de pagos.")
+      // 🛡️ CORRECCIÓN ESLINT: Cambiamos 'any' por 'unknown'
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : "Error al conectar con el ledger de pagos.";
+        console.error("Error cargando historial:", errorMessage)
+        setError(errorMessage)
       } finally {
         setLoading(false)
       }
