@@ -1,0 +1,20 @@
+/* eslint-disable prettier/prettier */
+export type UserRole =
+  | "SYS_ADMIN"
+  | "STF_DIR"
+  | "STF_PROF"
+  | "STF_ADMIN"
+  | "ALU_REG"
+  | "FAM_APO"
+  | "DIR_PRES_ALU"
+  | "DIR_TES_ALU"
+  | "DIR_SEC_ALU"
+  | "DIR_PRES_APO"
+  | "DIR_TES_APO"
+  | "DIR_SEC_APO"
+  | "CEN_PRES_CAL"
+  | "CEN_TES_CAL"
+  | "CEN_SEC_CAL"
+  | "CEN_PRES_CAP"
+  | "CEN_TES_CAP"
+  | "CEN_SEC_CAP";
